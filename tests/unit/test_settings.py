@@ -14,6 +14,8 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "LLM_BASE_URL",
         "LLM_API_KEY",
         "LLM_MODEL",
+        "LLM_TEMPERATURE",
+        "LLM_REASONING_EFFORT",
         "EMBEDDING_BASE_URL",
         "EMBEDDING_API_KEY",
         "EMBEDDING_MODEL",
@@ -80,4 +82,73 @@ def test_rejects_unknown_reranker_provider(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setenv("RERANKER_PROVIDER", "magic")
 
     with pytest.raises(ValueError, match="reranker_provider"):
+        Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+# --- LLM sampling vs reasoning effort ---------------------------------------------------
+# OpenAI GPT-6 models reject temperature/top_p unless reasoning effort is "none"
+# (https://developers.openai.com/api/docs/guides/latest-model).
+
+
+def test_temperature_and_reasoning_effort_are_unset_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_TEMPERATURE", raising=False)
+    monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_temperature is None
+    assert settings.llm_reasoning_effort is None
+    assert settings.llm_generation_options() == {}
+
+
+def test_generation_options_only_include_configured_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "high")
+    monkeypatch.delenv("LLM_TEMPERATURE", raising=False)
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_generation_options() == {"reasoning_effort": "high"}
+
+
+def test_temperature_is_allowed_with_reasoning_effort_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "none")
+    monkeypatch.setenv("LLM_TEMPERATURE", "0.2")
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_generation_options() == {"reasoning_effort": "none", "temperature": 0.2}
+
+
+def test_temperature_without_reasoning_effort_is_sent_for_classic_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+    monkeypatch.setenv("LLM_TEMPERATURE", "0")
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_generation_options() == {"temperature": 0.0}
+
+
+@pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
+def test_temperature_with_active_reasoning_effort_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, effort: str
+) -> None:
+    monkeypatch.setenv("LLM_REASONING_EFFORT", effort)
+    monkeypatch.setenv("LLM_TEMPERATURE", "0")
+
+    with pytest.raises(ValueError, match="LLM_TEMPERATURE"):
+        Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+def test_rejects_unknown_reasoning_effort(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "extreme")
+
+    with pytest.raises(ValueError, match="llm_reasoning_effort"):
         Settings(_env_file=None)  # type: ignore[call-arg]

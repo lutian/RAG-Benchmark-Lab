@@ -32,7 +32,9 @@ docker compose up --build
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | Geração (fase 5) | Qualquer endpoint `/chat/completions` compatível com OpenAI |
 | `LLM_API_KEY` | vazio | Geração | Para o Ollama, qualquer valor não vazio |
 | `LLM_MODEL` | `gpt-4o-mini` | Geração | Id do modelo no provedor |
-| `LLM_TEMPERATURE` / `LLM_TIMEOUT_SECONDS` | `0.0` / `60` | Geração | `0.0` para experimentos reproduzíveis |
+| `LLM_REASONING_EFFORT` | não definido | Geração | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`; os valores aceitos variam por modelo. Enviado como `reasoning_effort` só quando definido |
+| `LLM_TEMPERATURE` | não definido | Geração | Enviado só quando definido. A inicialização falha se for combinado com um reasoning effort diferente de `none` (veja abaixo) |
+| `LLM_TIMEOUT_SECONDS` | `60` | Geração | Timeout das requisições |
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | OpenAI | Indexação (fase 2) | Qualquer endpoint `/embeddings` compatível com OpenAI |
 | `EMBEDDING_DIMENSIONS` | `1536` | Indexação | Deve corresponder ao modelo (ex.: `768` para `nomic-embed-text`) |
 | `EMBEDDING_BATCH_SIZE` | `64` | Indexação | Textos por requisição de embeddings |
@@ -51,6 +53,18 @@ docker compose up --build
 | Ollama (perfil do Compose) | `http://ollama:11434/v1` | `ollama` | `llama3.2`, `nomic-embed-text` (768) |
 | Ollama no host | `http://host.docker.internal:11434/v1` | `ollama` | os mesmos |
 | Servidor llama.cpp | `http://<host>:8080/v1` | qualquer | o modelo GGUF carregado |
+
+### Temperatura vs reasoning effort
+
+Os modelos de raciocínio da OpenAI rejeitam parâmetros de amostragem: *"When reasoning effort is not `none`, remove `temperature`, `top_p`, and `top_logprobs`"* ([Using GPT-6](https://developers.openai.com/api/docs/guides/latest-model)). O GPT-6.1 Sol e o GPT-6 Astra não suportam `none`, então **nunca** aceitam `temperature`.
+
+| Tipo de modelo | Configure | Deixe sem definir |
+|----------------|-----------|-------------------|
+| Modelo de raciocínio (ex.: `gpt-6.1-sol`) | `LLM_REASONING_EFFORT=low` (ou maior) | `LLM_TEMPERATURE` |
+| GPT-6 Sol / Luna com raciocínio desligado | `LLM_REASONING_EFFORT=none` e, opcionalmente, `LLM_TEMPERATURE` | — |
+| Modelo de chat clássico (ex.: `gpt-4o-mini`, a maioria dos modelos Ollama/llama.cpp) | `LLM_TEMPERATURE=0.0` para execuções reproduzíveis | `LLM_REASONING_EFFORT` |
+
+**Por que não há uma lista fixa de modelos?** A regra depende do reasoning effort, não só do nome do modelo, e novos modelos saem com frequência. A aplicação envia apenas o que você configurou. Ela recusa na inicialização a única combinação que a API documenta como inválida (temperatura com raciocínio ativo), em vez de falhar na primeira requisição.
 
 LLM e embeddings são configurados de forma **independente**: por exemplo, gerar com o OpenRouter e gerar embeddings localmente com o Ollama.
 
