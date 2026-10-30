@@ -15,6 +15,7 @@ from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
 
 ChunkKey = tuple[UUID, str, UUID]
+VectorKey = tuple[UUID, str, UUID, int]
 
 
 @dataclass
@@ -22,12 +23,14 @@ class _State:
     collections: dict[UUID, Collection] = field(default_factory=dict)
     documents: dict[UUID, Document] = field(default_factory=dict)
     chunks: dict[ChunkKey, list[Chunk]] = field(default_factory=dict)
+    vectors: dict[VectorKey, tuple[str, list[float]]] = field(default_factory=dict)
 
     def copy(self) -> "_State":
         return _State(
             dict(self.collections),
             dict(self.documents),
             {key: list(value) for key, value in self.chunks.items()},
+            dict(self.vectors),
         )
 
 
@@ -80,6 +83,14 @@ class InMemoryChunkRepository:
         self, collection_id: UUID, config_key: str, document_id: UUID, chunks: Sequence[Chunk]
     ) -> None:
         self._state.chunks[(collection_id, config_key, document_id)] = list(chunks)
+        # Replaced chunks lose their vectors, exactly like the SQL cascade.
+        for key in [
+            k for k in self._state.vectors if k[:3] == (collection_id, config_key, document_id)
+        ]:
+            del self._state.vectors[key]
+
+    def count(self, collection_id: UUID, config_key: str) -> int:
+        return len(self.list(collection_id, config_key))
 
     def list(
         self, collection_id: UUID, config_key: str, document_id: UUID | None = None
@@ -94,6 +105,42 @@ class InMemoryChunkRepository:
         ]
 
 
+class InMemoryEmbeddingRepository:
+    def __init__(self, state: _State) -> None:
+        self._state = state
+
+    @staticmethod
+    def _key(collection_id: UUID, config_key: str, chunk: Chunk) -> VectorKey:
+        return (collection_id, config_key, chunk.document_id, chunk.index)
+
+    def pending(self, collection_id: UUID, config_key: str, limit: int) -> list[Chunk]:
+        chunks = InMemoryChunkRepository(self._state).list(collection_id, config_key)
+        missing = [
+            c for c in chunks if self._key(collection_id, config_key, c) not in self._state.vectors
+        ]
+        return missing[:limit]
+
+    def save(
+        self,
+        collection_id: UUID,
+        config_key: str,
+        model: str,
+        items: Sequence[tuple[Chunk, Sequence[float]]],
+    ) -> None:
+        for chunk, vector in items:
+            self._state.vectors[self._key(collection_id, config_key, chunk)] = (
+                model,
+                list(vector),
+            )
+
+    def count(self, collection_id: UUID, config_key: str) -> int:
+        return sum(1 for key in self._state.vectors if key[:2] == (collection_id, config_key))
+
+    def delete_collection(self, collection_id: UUID) -> None:
+        for key in [k for k in self._state.vectors if k[0] == collection_id]:
+            del self._state.vectors[key]
+
+
 class InMemoryUnitOfWork:
     """Keeps a committed state; each ``with`` block works on a copy until commit."""
 
@@ -106,6 +153,7 @@ class InMemoryUnitOfWork:
         self.collections = InMemoryCollectionRepository(state)
         self.documents = InMemoryDocumentRepository(state)
         self.chunks = InMemoryChunkRepository(state)
+        self.embeddings = InMemoryEmbeddingRepository(state)
 
     def __enter__(self) -> Self:
         self._bind(self._committed.copy())

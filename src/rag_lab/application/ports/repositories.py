@@ -7,6 +7,7 @@ from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
+from rag_lab.application.ports.embeddings import EmbeddingRepository
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
@@ -40,6 +41,8 @@ class ChunkRepository(Protocol):
         """Chunks of a chunk set, ordered by document then chunk index."""
         ...
 
+    def count(self, collection_id: UUID, config_key: str) -> int: ...
+
 
 class UnitOfWork(Protocol):
     """Transaction boundary: changes are visible only after :meth:`commit`.
@@ -53,6 +56,8 @@ class UnitOfWork(Protocol):
     def documents(self) -> DocumentRepository: ...
     @property
     def chunks(self) -> ChunkRepository: ...
+    @property
+    def embeddings(self) -> EmbeddingRepository: ...
 
     def __enter__(self) -> Self: ...
 

@@ -9,6 +9,7 @@ from rag_lab.adapters.outbound.persistence.postgres.repositories import (
     PostgresChunkRepository,
     PostgresCollectionRepository,
     PostgresDocumentRepository,
+    PostgresEmbeddingRepository,
 )
 
 
@@ -28,6 +29,7 @@ class SqlAlchemyUnitOfWork:
         self.collections = PostgresCollectionRepository(self._connection)
         self.documents = PostgresDocumentRepository(self._connection)
         self.chunks = PostgresChunkRepository(self._connection)
+        self.embeddings = PostgresEmbeddingRepository(self._connection)
         return self
 
     def __exit__(

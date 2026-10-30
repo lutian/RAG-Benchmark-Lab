@@ -23,3 +23,7 @@ class NotFoundError(RagLabError):
 
 class ConflictError(RagLabError):
     """The operation would violate a uniqueness rule (e.g. duplicate collection name)."""
+
+
+class EmbeddingProviderError(RagLabError):
+    """The embeddings provider failed or returned vectors that do not match the spec."""
