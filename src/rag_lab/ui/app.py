@@ -16,6 +16,7 @@ with st.sidebar:
 navigation = st.navigation(
     [
         st.Page(PAGES_DIR / "home.py", title="Overview", default=True),
+        st.Page(PAGES_DIR / "ingestion.py", title="Ingestion"),
     ]
 )
 navigation.run()

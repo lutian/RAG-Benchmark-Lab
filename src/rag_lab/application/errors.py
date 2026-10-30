@@ -13,6 +13,10 @@ class DocumentParsingError(RagLabError):
     """The file has a supported type but its content cannot be turned into text."""
 
 
+class UploadTooLargeError(DocumentParsingError):
+    """The file exceeds the configured upload limit."""
+
+
 class NotFoundError(RagLabError):
     """A requested entity does not exist (or is not visible in the given collection)."""
 

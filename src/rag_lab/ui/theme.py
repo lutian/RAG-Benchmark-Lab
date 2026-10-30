@@ -57,6 +57,20 @@ section[data-testid="stSidebar"] {
 mark.rl-evidence { background: var(--rl-highlight); padding: 0 2px; border-radius: 3px; }
 mark.rl-chunk-a { background: #DBEAFE; }
 mark.rl-chunk-b { background: #FDF3B0; }
+mark.rl-overlap { background: #C7F0D2; }
+mark[class^="rl-"] { padding: 0; border-radius: 2px; color: inherit; }
+
+.rl-preview {
+  border: 1px solid var(--rl-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  max-height: 70vh;
+  overflow-y: auto;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  background: #FFFFFF;
+}
 
 .rl-brand { font-weight: 700; font-size: 1.4rem; letter-spacing: -0.02em; }
 .rl-brand span { color: var(--rl-accent); }

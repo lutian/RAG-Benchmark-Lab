@@ -47,9 +47,12 @@ class UnitOfWork(Protocol):
     Leaving the ``with`` block without committing rolls everything back.
     """
 
-    collections: CollectionRepository
-    documents: DocumentRepository
-    chunks: ChunkRepository
+    @property
+    def collections(self) -> CollectionRepository: ...
+    @property
+    def documents(self) -> DocumentRepository: ...
+    @property
+    def chunks(self) -> ChunkRepository: ...
 
     def __enter__(self) -> Self: ...
 

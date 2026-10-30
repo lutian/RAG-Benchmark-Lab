@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from rag_lab.application.errors import ConflictError, DocumentParsingError, NotFoundError
+from rag_lab.application.errors import ConflictError, NotFoundError, UploadTooLargeError
 from rag_lab.application.ports.parsing import DocumentParser
 from rag_lab.application.ports.repositories import UnitOfWork
 from rag_lab.domain.chunking import ChunkingConfig, chunk_document
@@ -79,7 +79,7 @@ class IngestionService:
 
     def ingest_document(self, collection_id: UUID, filename: str, data: bytes) -> IngestionResult:
         if self._max_upload_bytes is not None and len(data) > self._max_upload_bytes:
-            raise DocumentParsingError(
+            raise UploadTooLargeError(
                 f"file {filename!r} exceeds the upload limit of {self._max_upload_bytes} bytes"
             )
         content_hash = hashlib.sha256(data).hexdigest()
