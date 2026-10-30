@@ -45,3 +45,14 @@ def test_collection_name_is_trimmed_and_required() -> None:
     assert Collection.create("  Contracts 2025 ").name == "Contracts 2025"
     with pytest.raises(ValueError, match="name"):
         Collection.create("   ")
+
+
+def test_collection_rejects_duplicate_chunking_configs() -> None:
+    from rag_lab.domain.chunking import ChunkingConfig, ChunkingStrategy
+
+    config = ChunkingConfig(ChunkingStrategy.FIXED, 100, 0)
+
+    with pytest.raises(ValueError, match="unique"):
+        Collection.create("c", (config, config))
+    with pytest.raises(ValueError, match="already exists"):
+        Collection.create("c", (config,)).with_chunking_config(config)
