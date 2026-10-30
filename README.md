@@ -11,8 +11,8 @@ This is not a chatbot that reads PDFs. You upload any corpus. The lab chunks it 
 | Phase | Deliverable | Status |
 |-------|-------------|--------|
 | 1. Ingestion | Upload, parsing (PDF/MD/TXT), metadata, configurable chunking, chunk-independent reference layer | ✅ Done |
-| 2. Indexing | Embeddings persisted in pgvector | ⏳ Next |
-| 3. Retrieval | Vector, full-text and hybrid search | Planned |
+| 2. Indexing | Embeddings from any OpenAI-compatible API, persisted in pgvector; resumable, model-bound collections | ✅ Done |
+| 3. Retrieval | Vector, full-text and hybrid search | ⏳ Next |
 | 4. Reranking | Local cross-encoder and `/rerank` API | Planned |
 | 5. Generation | Grounded answers with citations and abstention | Planned |
 | 6. Evaluation | Golden dataset, Recall@k, MRR, citation validity | Planned |
@@ -35,7 +35,7 @@ docker compose up --build -d
 | API (FastAPI) | http://localhost:8000 · interactive docs at http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (loopback only) |
 
-Then open the UI, create a collection in the sidebar, upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set.
+Then open the UI, create a collection in the sidebar, upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set. Press **Index chunk set** to embed it with the provider configured in `.env`.
 
 Optional local models with Ollama:
 
@@ -60,6 +60,10 @@ curl -s -X POST localhost:8000/collections/<collection_id>/documents -F "file=@r
 # 3. Compare how two strategies cut the same document
 curl -s "localhost:8000/collections/<collection_id>/chunk-sets/fixed-800-120/chunks?document_id=<id>"
 curl -s "localhost:8000/collections/<collection_id>/chunk-sets/structure-800-120/chunks?document_id=<id>"
+
+# 4. Embed a chunk set (uses EMBEDDING_* from .env) and check progress
+curl -s -X POST localhost:8000/collections/<collection_id>/chunk-sets/structure-800-120/index
+curl -s localhost:8000/collections/<collection_id>/index
 ```
 
 ## Local development (without Docker for the app)
@@ -87,11 +91,13 @@ make ui                          # http://localhost:8501 (set API_URL=http://loc
 | Pydantic, pydantic-settings | Request validation; typed `.env` configuration |
 | SQLAlchemy 2 (Core), psycopg 3, Alembic | PostgreSQL access and versioned migrations |
 | pypdf | PDF text extraction (BSD license) |
+| langchain-openai (+ openai SDK) | Client for any OpenAI-compatible embeddings API |
+| pgvector (Python) + `vector` extension | Vector column type for SQLAlchemy and PostgreSQL |
 | Streamlit, httpx | UI and its HTTP client |
 | pytest, Hypothesis, fpdf2 | Tests, property-based tests, PDF fixtures |
 | ruff, mypy | Lint/format and strict type checking |
 
-Phase 2+ adds LangChain (OpenAI-compatible clients), pgvector and Sentence Transformers. Each phase documents its new dependencies here.
+Later phases add Sentence Transformers (local reranker). Each phase documents its new dependencies here.
 
 ### Common commands
 

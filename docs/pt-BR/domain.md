@@ -11,7 +11,8 @@ O domínio é o vocabulário do laboratório: **spans, documentos, chunks, cole�
 | `spans.py` | Intervalo de caracteres sobre o texto canônico | `Span` |
 | `documents.py` | Um documento processado e sua estrutura | `Document`, `StructuralElement`, `ElementKind`, `MediaType` |
 | `chunks.py` | Unidade recuperável derivada de um documento | `Chunk` |
-| `collections.py` | Fronteira de isolamento e os chunk sets a construir | `Collection` |
+| `collections.py` | Fronteira de isolamento, chunk sets a construir, vínculo de embeddings | `Collection`, `EmbeddingMismatchError` |
+| `embeddings.py` | Qual modelo gerou um vetor e seu tamanho | `EmbeddingSpec` |
 | `chunking/config.py` | Como fazer o chunking | `ChunkingConfig`, `ChunkingStrategy` |
 | `chunking/strategies.py` | Os algoritmos de chunking | `chunk_document()` |
 
@@ -57,6 +58,22 @@ Um span de um documento com metadados de localização desnormalizados (`page_nu
 ## `Collection`
 
 Um conjunto nomeado de documentos, com a lista de `ChunkingConfig` com as quais cada documento é dividido (um **chunk set** por configuração). É a **fronteira de isolamento**: as consultas sempre têm escopo de uma coleção. As chaves de configuração precisam ser únicas, e `with_chunking_config()` retorna uma nova coleção (as entidades são imutáveis).
+
+## `EmbeddingSpec` e o vínculo de embeddings
+
+**O que é:** `EmbeddingSpec(model, dimensions)`, um value object validado (modelo não vazio, dimensão positiva).
+
+**O que faz:** uma coleção começa **sem vínculo** (`embedding is None`). A primeira indexação chama `bind_embedding(spec)`:
+
+| Estado da coleção | `bind_embedding(spec)` |
+|-------------------|------------------------|
+| Sem vínculo | Vincula a `spec` |
+| Vinculada à mesma spec | Nada muda |
+| Vinculada a outra spec | `EmbeddingMismatchError` ("rebuild the index or create a new collection") |
+
+`unbind_embedding()` é usado na reconstrução (rebuild).
+
+**Por quê:** vetores de modelos diferentes, ou com dimensões diferentes, vivem em espaços diferentes. Comparar o vetor de uma pergunta gerado pelo `nomic-embed-text` com chunks gerados pelo `text-embedding-3-small` produz números, mas sem significado, e nada falharia de forma visível. O vínculo transforma essa corrupção silenciosa em um erro explícito.
 
 ## `ChunkingConfig`
 

@@ -9,7 +9,9 @@ The application layer holds the **use cases** (what the system can do) and the *
 | Module | Purpose |
 |--------|---------|
 | `services/ingestion.py` | `IngestionService`: collections, document ingestion, chunk sets |
+| `services/indexing.py` | `IndexingService`: embed chunk sets, binding, progress |
 | `ports/parsing.py` | `DocumentParser` port and its output `ParsedDocument` |
+| `ports/embeddings.py` | `Embedder` (the model) and `EmbeddingRepository` (the vector store) ports |
 | `ports/repositories.py` | Repository ports and the `UnitOfWork` transaction boundary |
 | `errors.py` | Expected failures, translated to HTTP codes by the API |
 
@@ -28,6 +30,22 @@ The application layer holds the **use cases** (what the system can do) and the *
 
 **Why a service class and not one class per use case?** The ingestion use cases share their dependencies (unit of work, parser, limits) and are small. One cohesive service keeps the composition root simple. When a use case grows (retrieval, evaluation), it gets its own service.
 
+## `IndexingService`
+
+| Use case | Behaviour |
+|----------|-----------|
+| `index_chunk_set(id, key, rebuild=False)` | Binds the collection to the embedder's spec, then embeds pending chunks batch by batch (`EMBEDDING_BATCH_SIZE`) and commits each batch. Returns an `IndexingReport` (total, already indexed, embedded now, seconds) |
+| `index_chunk_set(..., rebuild=True)` | Deletes every vector of the collection, unbinds it, then indexes from scratch with the current model |
+| `status(id)` | `IndexStatus`: the binding plus `embedded / total` for every chunk set |
+
+Design points:
+
+- **The provider is called outside any transaction.** A slow embeddings API never holds a database connection or locks.
+- **Resumable by construction.** "Pending" means "chunk without a vector", so re-running after a failure continues where it stopped. No job table is needed.
+- **Vectors are validated before saving.** The count must match the batch and every vector must have the bound dimension. Otherwise `EmbeddingProviderError` explains which setting to check (`EMBEDDING_DIMENSIONS`).
+- **Explicit action, not on upload.** Uploading stays fast and works without a provider. Indexing can be repeated per chunk set and timed for the benchmark. See [ADR-011](decisions.md#adr-011-explicit-resumable-indexing).
+- **Bounded loop.** The batch loop runs at most `ceil(pending / batch) + 1` times, so a faulty store can never spin forever.
+
 ## Ports
 
 ### `DocumentParser`
@@ -45,7 +63,18 @@ It returns canonical text, structural elements and metadata, or raises `Unsuppor
 | `CollectionRepository` | Add, update, get by id or name, list |
 | `DocumentRepository` | Add, get **(collection_id, document_id)**, list by collection, find by hash |
 | `ChunkRepository` | Replace one document's chunks in one chunk set; list a chunk set (optionally one document) |
-| `UnitOfWork` | Context manager exposing the three repositories; `commit()` makes changes visible, leaving the block without committing rolls back |
+| `EmbeddingRepository` | Pending chunks of a chunk set, save vectors, count, delete all vectors of a collection |
+| `UnitOfWork` | Context manager exposing the repositories; `commit()` makes changes visible, leaving the block without committing rolls back |
+
+### `Embedder`
+
+```python
+spec: EmbeddingSpec
+def embed_documents(self, texts: Sequence[str]) -> list[list[float]]
+def embed_query(self, text: str) -> list[float]
+```
+
+Implementations wrap provider failures in `EmbeddingProviderError`. The query method is used from Phase 3 (retrieval).
 
 **Isolation is in the signatures.** No read method returns documents or chunks without a `collection_id`. A caller cannot "forget the filter", because there is no unfiltered method to call.
 
@@ -62,7 +91,8 @@ It returns canonical text, structural elements and metadata, or raises `Unsuppor
 | Error | Meaning | HTTP |
 |-------|---------|------|
 | `NotFoundError` | Entity does not exist **or belongs to another collection** | 404 |
-| `ConflictError` | Duplicate collection name or chunk set | 409 |
+| `ConflictError` | Duplicate collection name or chunk set; collection bound to another embedding model | 409 |
+| `EmbeddingProviderError` | Embeddings API failed, was unreachable, or returned vectors of the wrong size | 502 |
 | `UploadTooLargeError` | File exceeds `MAX_UPLOAD_MB` | 413 |
 | `UnsupportedDocumentError` | Extension is not `.pdf`, `.md`, `.markdown`, `.txt` | 415 |
 | `DocumentParsingError` | Supported type but unreadable (corrupt, empty, scanned PDF without text) | 422 |

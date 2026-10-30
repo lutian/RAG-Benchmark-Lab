@@ -18,8 +18,9 @@ flowchart LR
     end
     subgraph Outbound["Outbound adapters"]
         PAR["Parsers<br/>PDF / Markdown / TXT"]
-        PG["PostgreSQL<br/>SQLAlchemy Core + Alembic"]
+        PG["PostgreSQL + pgvector<br/>SQLAlchemy Core + Alembic"]
         MEM["In-memory store"]
+        EMB["Embeddings provider<br/>OpenAI-compatible API (LangChain)"]
     end
     UI -- HTTP --> API
     API --> APP
@@ -27,6 +28,7 @@ flowchart LR
     APP -. port .-> PAR
     APP -. port .-> PG
     APP -. port .-> MEM
+    APP -. port .-> EMB
 ```
 
 | Layer | Package | Purpose | May import |
@@ -62,7 +64,28 @@ sequenceDiagram
     A-->>C: 201 document summary + chunk counts per set
 ```
 
-### Question answering (planned, phases 2–5)
+### Indexing (implemented)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as IndexingService
+    participant U as UnitOfWork
+    participant E as Embedder (OpenAI-compatible)
+    C->>S: index_chunk_set(collection, chunk set, rebuild?)
+    S->>U: bind collection to model + dimension (or 409 if bound to another), commit
+    loop until no pending chunks
+        S->>U: next batch of chunks without a vector
+        S->>E: embed_documents(texts)  (no transaction open)
+        S->>S: check count and dimension of vectors
+        S->>U: save vectors, commit
+    end
+    S-->>C: report (total, already indexed, embedded now, seconds)
+```
+
+Each batch is committed on its own, so a provider failure halfway loses nothing: the next run embeds only what is still pending.
+
+### Question answering (planned, phases 3–5)
 
 `Question → retrieval strategy (vector / full-text / hybrid) → filters → reranking → context → LLM → answer with citations`, or abstention when the evidence is insufficient.
 

@@ -10,12 +10,14 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 | [002](#adr-002-camada-de-referência-independente-do-chunking) | Camada de referência independente do chunking (spans de caracteres) | Aceita |
 | [003](#adr-003-tamanho-do-chunk-em-caracteres) | Tamanho do chunk medido em caracteres | Aceita |
 | [004](#adr-004-chunkers-próprios-langchain-na-borda-dos-provedores) | Chunkers próprios; LangChain só na borda dos provedores | Aceita |
-| [005](#adr-005-postgresql-para-tudo) | PostgreSQL + pgvector para documentos, vetores e full-text | Aceita (vetores planejados) |
-| [006](#adr-006-provedores-compatíveis-com-openai-configurados-no-env) | Provedores compatíveis com OpenAI configurados no `.env` | Aceita (clientes planejados) |
+| [005](#adr-005-postgresql-para-tudo) | PostgreSQL + pgvector para documentos, vetores e full-text | Aceita (full-text planejado) |
+| [006](#adr-006-provedores-compatíveis-com-openai-configurados-no-env) | Provedores compatíveis com OpenAI configurados no `.env` | Aceita (embeddings prontos, chat planejado) |
 | [007](#adr-007-streamlit-com-css-customizado) | Streamlit com CSS customizado | Aceita |
 | [008](#adr-008-coleções-como-fronteira-de-isolamento) | Coleções como fronteira de isolamento | Aceita |
 | [009](#adr-009-cross-encoder-local-e-adaptador-de-api-de-rerank) | Cross-encoder local e adaptador de API `/rerank` | Planejada |
 | [010](#adr-010-perguntas-golden-sintéticas-com-revisão-humana) | Perguntas golden sintéticas com revisão humana | Planejada |
+| [011](#adr-011-indexação-explícita-e-retomável) | Indexação explícita e retomável, com coleções vinculadas ao modelo | Aceita |
+| [012](#adr-012-uma-tabela-de-vetores-sem-dimensão-fixa) | Uma tabela de vetores sem dimensão fixa | Aceita |
 
 ---
 
@@ -98,3 +100,28 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 **Decisão (planejada, fase 6):** o LLM propõe perguntas a partir de trechos amostrados; o trecho de origem vira o span rotulado; uma tela no Streamlit permite que uma pessoa edite, aprove ou rejeite as perguntas e adicione as suas.
 
 **Por quê:** o corpus é arbitrário, então não existem rótulos de antemão. Perguntas totalmente sintéticas copiam a redação do trecho e inflam as pontuações lexicais (BM25). A revisão humana mantém o benchmark honesto.
+
+## ADR-011: Indexação explícita e retomável
+
+**Decisão:** gerar embeddings é uma ação explícita por chunk set (`POST …/index`), fora do upload. O trabalho pendente são os "chunks sem vetor", processados em lotes com um commit por lote. A primeira execução vincula a coleção ao modelo e à dimensão de embeddings; um modelo diferente retorna 409, a menos que `rebuild=true`.
+
+**Por quê:** o upload continua rápido e funciona offline. O custo e o tempo da indexação podem ser medidos por chunk set para o benchmark. Uma falha do provedor no meio do caminho (rate limit, timeout) perde no máximo um lote, e a próxima chamada retoma sem precisar de uma tabela de jobs.
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| Gerar embeddings durante o upload | A latência do upload passaria a depender de uma API remota; uma falha rejeitaria um documento perfeitamente válido |
+| Fila de jobs em background (Celery, RQ) | Um serviço e um broker a mais para um MVP; o design retomável entrega a maior parte do benefício |
+| Uma única transação para o chunk set inteiro | Uma falha em 95% jogaria fora todos os embeddings já pagos |
+| Sem vínculo, guardando só o modelo por vetor | Coleções com modelos misturados tornariam as similaridades silenciosamente sem sentido |
+
+## ADR-012: Uma tabela de vetores sem dimensão fixa
+
+**Decisão:** uma única tabela `chunk_embeddings` com uma coluna `vector` sem tipo de dimensão, mais uma coluna `dimensions` protegida por `CHECK (vector_dims(embedding) = dimensions)`.
+
+**Por quê:** as coleções ficam vinculadas a modelos diferentes (768, 1024, 1536… dimensões), e uma coluna tipada `vector(n)` obrigaria um único modelo para o banco inteiro. **Trade-off:** índices HNSW exigem dimensão fixa, então a Fase 3 os cria por coleção, como índices parciais de expressão (`(embedding::vector(n)) … WHERE collection_id = …`).
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| Coluna `vector(1536)` | Prende todas as coleções a um único modelo |
+| Uma tabela por coleção ou por dimensão | DDL dinâmico na aplicação, migrações e isolamento mais difíceis de raciocinar |
+| Coluna de vetor em `chunks` | Uma reconstrução reescreveria a tabela da camada de referência; vetores são dados derivados e ficam separados |

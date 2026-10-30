@@ -18,8 +18,9 @@ flowchart LR
     end
     subgraph Outbound["Adaptadores de saída"]
         PAR["Parsers<br/>PDF / Markdown / TXT"]
-        PG["PostgreSQL<br/>SQLAlchemy Core + Alembic"]
+        PG["PostgreSQL + pgvector<br/>SQLAlchemy Core + Alembic"]
         MEM["Store em memória"]
+        EMB["Provedor de embeddings<br/>API compatível com OpenAI (LangChain)"]
     end
     UI -- HTTP --> API
     API --> APP
@@ -27,6 +28,7 @@ flowchart LR
     APP -. port .-> PAR
     APP -. port .-> PG
     APP -. port .-> MEM
+    APP -. port .-> EMB
 ```
 
 | Camada | Pacote | Propósito | Pode importar |
@@ -62,7 +64,28 @@ sequenceDiagram
     A-->>C: 201 resumo do documento + quantidade de chunks por set
 ```
 
-### Perguntas e respostas (planejado, fases 2–5)
+### Indexação (implementada)
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as IndexingService
+    participant U as UnitOfWork
+    participant E as Embedder (compatível com OpenAI)
+    C->>S: index_chunk_set(coleção, chunk set, rebuild?)
+    S->>U: vincula a coleção a modelo + dimensão (ou 409 se já vinculada a outro), commit
+    loop até não haver chunks pendentes
+        S->>U: próximo lote de chunks sem vetor
+        S->>E: embed_documents(textos)  (sem transação aberta)
+        S->>S: confere quantidade e dimensão dos vetores
+        S->>U: grava os vetores, commit
+    end
+    S-->>C: relatório (total, já indexados, gerados agora, segundos)
+```
+
+Cada lote recebe seu próprio commit, então uma falha do provedor no meio do caminho não perde nada: a próxima execução gera só o que ainda está pendente.
+
+### Perguntas e respostas (planejado, fases 3–5)
 
 `Pergunta → estratégia de recuperação (vetorial / full-text / híbrida) → filtros → reranking → contexto → LLM → resposta com citações`, ou abstenção quando a evidência é insuficiente.
 

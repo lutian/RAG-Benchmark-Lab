@@ -10,12 +10,14 @@ Each record states the decision first, then the alternatives that were rejected 
 | [002](#adr-002-a-chunking-independent-reference-layer) | Chunking-independent reference layer (character spans) | Accepted |
 | [003](#adr-003-chunk-size-in-characters) | Chunk size measured in characters | Accepted |
 | [004](#adr-004-own-chunkers-langchain-at-the-provider-edge) | Own chunkers; LangChain only at the provider edge | Accepted |
-| [005](#adr-005-postgresql-for-everything) | PostgreSQL + pgvector for documents, vectors and full-text | Accepted (vectors planned) |
-| [006](#adr-006-openai-compatible-providers-configured-in-env) | OpenAI-compatible providers configured in `.env` | Accepted (clients planned) |
+| [005](#adr-005-postgresql-for-everything) | PostgreSQL + pgvector for documents, vectors and full-text | Accepted (full-text planned) |
+| [006](#adr-006-openai-compatible-providers-configured-in-env) | OpenAI-compatible providers configured in `.env` | Accepted (embeddings done, chat planned) |
 | [007](#adr-007-streamlit-with-custom-css) | Streamlit with custom CSS | Accepted |
 | [008](#adr-008-collections-as-the-isolation-boundary) | Collections as the isolation boundary | Accepted |
 | [009](#adr-009-local-cross-encoder-plus-rerank-api-adapter) | Local cross-encoder plus `/rerank` API adapter | Planned |
 | [010](#adr-010-synthetic-golden-questions-with-human-review) | Synthetic golden questions with human review | Planned |
+| [011](#adr-011-explicit-resumable-indexing) | Explicit, resumable indexing with model-bound collections | Accepted |
+| [012](#adr-012-one-vector-table-without-a-fixed-dimension) | One vector table without a fixed dimension | Accepted |
 
 ---
 
@@ -98,3 +100,28 @@ Each record states the decision first, then the alternatives that were rejected 
 **Decision (planned, phase 6):** the LLM proposes questions from sampled passages; the source passage becomes the labelled span; a Streamlit screen lets a human edit, approve or reject them and add their own.
 
 **Why:** the corpus is arbitrary, so no labels exist up front. Fully synthetic questions copy the passage wording and inflate lexical (BM25) scores. Human review keeps the benchmark honest.
+
+## ADR-011: Explicit, resumable indexing
+
+**Decision:** embedding is an explicit action per chunk set (`POST …/index`), not part of upload. Pending work is "chunks without a vector", embedded in batches with one commit per batch. The first run binds the collection to the embedding model and dimension; a different model returns 409 unless `rebuild=true`.
+
+**Why:** uploads stay fast and work offline. Indexing cost and time can be measured per chunk set for the benchmark. A provider failure halfway through (rate limit, timeout) loses at most one batch, and the next call resumes without a job table.
+
+| Alternative | Why not |
+|-------------|---------|
+| Embed during upload | Upload latency depends on a remote API; a failure would reject a perfectly valid document |
+| Background job queue (Celery, RQ) | An extra service and a broker for an MVP; the resumable design gives most of the benefit |
+| One transaction for the whole chunk set | A failure at 95% throws away all paid-for embeddings |
+| No binding, store the model per vector only | Mixed-model collections would make similarity scores silently meaningless |
+
+## ADR-012: One vector table without a fixed dimension
+
+**Decision:** a single `chunk_embeddings` table with an untyped `vector` column, plus a `dimensions` column guarded by `CHECK (vector_dims(embedding) = dimensions)`.
+
+**Why:** collections are bound to different models (768, 1024, 1536… dimensions), and a typed column `vector(n)` would force one model for the whole database. **Trade-off:** HNSW indexes require a fixed dimension, so Phase 3 builds them per collection as partial expression indexes (`(embedding::vector(n)) … WHERE collection_id = …`).
+
+| Alternative | Why not |
+|-------------|---------|
+| `vector(1536)` column | Locks every collection to one model |
+| One table per collection or per dimension | Dynamic DDL in the application, harder migrations and isolation reasoning |
+| Vector column on `chunks` | A rebuild would rewrite the reference layer table; vectors are derived data and are kept apart |

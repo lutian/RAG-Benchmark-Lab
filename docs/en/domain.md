@@ -11,7 +11,8 @@ The domain is the vocabulary of the lab: **spans, documents, chunks, collections
 | `spans.py` | Character interval over the canonical text | `Span` |
 | `documents.py` | A parsed document and its structure | `Document`, `StructuralElement`, `ElementKind`, `MediaType` |
 | `chunks.py` | A retrievable unit derived from a document | `Chunk` |
-| `collections.py` | Isolation boundary and the chunk sets to build | `Collection` |
+| `collections.py` | Isolation boundary, chunk sets to build, embedding binding | `Collection`, `EmbeddingMismatchError` |
+| `embeddings.py` | Which model produced a vector and its length | `EmbeddingSpec` |
 | `chunking/config.py` | How to chunk | `ChunkingConfig`, `ChunkingStrategy` |
 | `chunking/strategies.py` | The chunking algorithms | `chunk_document()` |
 
@@ -57,6 +58,22 @@ A span of a document plus denormalised location metadata (`page_numbers`, `secti
 ## `Collection`
 
 A named set of documents, plus the list of `ChunkingConfig`s every document is chunked with (one **chunk set** per config). It is the **isolation boundary**: queries are always scoped to one collection. Config keys must be unique, and `with_chunking_config()` returns a new collection (entities are immutable).
+
+## `EmbeddingSpec` and the embedding binding
+
+**What it is:** `EmbeddingSpec(model, dimensions)`, a validated value object (non-empty model, positive dimension).
+
+**What it does:** a collection starts **unbound** (`embedding is None`). The first indexing run calls `bind_embedding(spec)`:
+
+| Collection state | `bind_embedding(spec)` |
+|------------------|------------------------|
+| Unbound | Binds to `spec` |
+| Bound to the same spec | No-op |
+| Bound to a different spec | `EmbeddingMismatchError` ("rebuild the index or create a new collection") |
+
+`unbind_embedding()` is used by a rebuild.
+
+**Why:** vectors from different models, or with different dimensions, live in different spaces. Comparing a `nomic-embed-text` query vector with `text-embedding-3-small` chunk vectors returns numbers, but meaningless ones, and nothing would fail loudly. The binding turns that silent corruption into an explicit error.
 
 ## `ChunkingConfig`
 

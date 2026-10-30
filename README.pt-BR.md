@@ -11,8 +11,8 @@ Não é um chatbot que lê PDFs. Você envia qualquer corpus. O laboratório o d
 | Fase | Entregável | Status |
 |------|------------|--------|
 | 1. Ingestão | Upload, parsing (PDF/MD/TXT), metadados, chunking configurável, camada de referência independente do chunking | ✅ Concluída |
-| 2. Indexação | Embeddings persistidos no pgvector | ⏳ Próxima |
-| 3. Recuperação | Busca vetorial, full-text e híbrida | Planejada |
+| 2. Indexação | Embeddings de qualquer API compatível com OpenAI, persistidos no pgvector; retomável, coleções vinculadas ao modelo | ✅ Concluída |
+| 3. Recuperação | Busca vetorial, full-text e híbrida | ⏳ Próxima |
 | 4. Reranking | Cross-encoder local e API `/rerank` | Planejada |
 | 5. Geração | Respostas fundamentadas com citações e abstenção | Planejada |
 | 6. Avaliação | Golden dataset, Recall@k, MRR, validade das citações | Planejada |
@@ -35,7 +35,7 @@ docker compose up --build -d
 | API (FastAPI) | http://localhost:8000 · documentação interativa em http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (apenas loopback) |
 
-Abra a UI, crie uma coleção na barra lateral, envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set.
+Abra a UI, crie uma coleção na barra lateral, envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set. Clique em **Index chunk set** para gerar os embeddings com o provedor configurado no `.env`.
 
 Modelos locais opcionais com Ollama:
 
@@ -60,6 +60,10 @@ curl -s -X POST localhost:8000/collections/<collection_id>/documents -F "file=@r
 # 3. Comparar como duas estratégias cortam o mesmo documento
 curl -s "localhost:8000/collections/<collection_id>/chunk-sets/fixed-800-120/chunks?document_id=<id>"
 curl -s "localhost:8000/collections/<collection_id>/chunk-sets/structure-800-120/chunks?document_id=<id>"
+
+# 4. Gerar os embeddings de um chunk set (usa EMBEDDING_* do .env) e ver o progresso
+curl -s -X POST localhost:8000/collections/<collection_id>/chunk-sets/structure-800-120/index
+curl -s localhost:8000/collections/<collection_id>/index
 ```
 
 ## Desenvolvimento local (sem Docker para a aplicação)
@@ -87,11 +91,13 @@ make ui                          # http://localhost:8501 (defina API_URL=http://
 | Pydantic, pydantic-settings | Validação de requisições; configuração tipada do `.env` |
 | SQLAlchemy 2 (Core), psycopg 3, Alembic | Acesso ao PostgreSQL e migrações versionadas |
 | pypdf | Extração de texto de PDF (licença BSD) |
+| langchain-openai (+ SDK openai) | Cliente para qualquer API de embeddings compatível com OpenAI |
+| pgvector (Python) + extensão `vector` | Tipo de coluna vetorial para SQLAlchemy e PostgreSQL |
 | Streamlit, httpx | UI e seu cliente HTTP |
 | pytest, Hypothesis, fpdf2 | Testes, testes baseados em propriedades, fixtures de PDF |
 | ruff, mypy | Lint/formatação e checagem estrita de tipos |
 
-A fase 2 em diante adiciona LangChain (clientes compatíveis com OpenAI), pgvector e Sentence Transformers. Cada fase documenta aqui suas novas dependências.
+As próximas fases adicionam o Sentence Transformers (reranker local). Cada fase documenta aqui suas novas dependências.
 
 ### Comandos comuns
 

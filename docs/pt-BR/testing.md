@@ -32,6 +32,12 @@ TEST_DATABASE_URL=postgresql+psycopg://rag:rag@localhost:5432/rag_lab uv run pyt
 | Contrato | `tests/contracts/` | **Os mesmos testes contra memória e PostgreSQL**: isolamento, transações, ida e volta da camada de referência | s |
 | UI | `tests/unit/ui/` | Páginas renderizam com uma API falsa (`streamlit.testing.AppTest`); renderização dos destaques | ms |
 
+## Testando o adaptador de embeddings
+
+`tests/unit/adapters/embeddings/` sobe um servidor HTTP real em `127.0.0.1` que fala o protocolo `/v1/embeddings` e registra cada requisição. Os testes verificam o que de fato trafega: texto puro (e não ids de tokens), os limites dos lotes, o nome do modelo, o header `Authorization` e a ausência do campo `dimensions`. Também cobrem como respostas 500 e hosts inacessíveis são reportados. Um mock do SDK não pegaria um padrão do LangChain que muda o payload.
+
+Tudo acima do adaptador usa `tests/fakes.py::FakeEmbedder`: vetores determinísticos, com opções para falhar na n-ésima chamada ou retornar a dimensão errada.
+
 ## Por que testes de contrato?
 
 O store em memória deixa a maioria dos testes rápida. Mas testes rápidos só são confiáveis se o dublê se comporta como o real, então a suíte de contrato é parametrizada para os dois adaptadores. Se o PostgreSQL e a memória divergirem (ordenação, rollback, isolamento), a suíte falha.

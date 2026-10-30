@@ -32,6 +32,12 @@ TEST_DATABASE_URL=postgresql+psycopg://rag:rag@localhost:5432/rag_lab uv run pyt
 | Contract | `tests/contracts/` | **Same tests against in-memory and PostgreSQL**: isolation, transactions, round-trip of the reference layer | s |
 | UI | `tests/unit/ui/` | Pages render with a faked API (`streamlit.testing.AppTest`); highlight rendering | ms |
 
+## Testing the embeddings adapter
+
+`tests/unit/adapters/embeddings/` starts a real HTTP server on `127.0.0.1` that speaks the `/v1/embeddings` protocol and records every request. The tests assert what actually goes over the wire: raw text (not token ids), batch boundaries, the model name, the `Authorization` header, no `dimensions` field. They also cover how 500 responses and unreachable hosts are reported. Mocking the SDK would not catch a LangChain default that changes the payload.
+
+Everything above the adapter uses `tests/fakes.py::FakeEmbedder`: deterministic vectors, with switches to fail on the n-th call or return the wrong dimension.
+
 ## Why contract tests?
 
 The in-memory store makes most tests fast. Fast tests are only trustworthy if the fake behaves like the real thing, so the contract suite is parametrised over both adapters. If PostgreSQL and memory ever disagree (ordering, rollback, isolation), the suite fails.

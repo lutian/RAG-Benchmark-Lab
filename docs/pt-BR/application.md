@@ -9,7 +9,9 @@ A camada de aplicação contém os **casos de uso** (o que o sistema sabe fazer)
 | Módulo | Propósito |
 |--------|-----------|
 | `services/ingestion.py` | `IngestionService`: coleções, ingestão de documentos, chunk sets |
+| `services/indexing.py` | `IndexingService`: embeddings dos chunk sets, vínculo, progresso |
 | `ports/parsing.py` | Port `DocumentParser` e sua saída `ParsedDocument` |
+| `ports/embeddings.py` | Ports `Embedder` (o modelo) e `EmbeddingRepository` (o armazenamento de vetores) |
 | `ports/repositories.py` | Ports de repositório e a fronteira transacional `UnitOfWork` |
 | `errors.py` | Falhas esperadas, traduzidas em códigos HTTP pela API |
 
@@ -28,6 +30,22 @@ A camada de aplicação contém os **casos de uso** (o que o sistema sabe fazer)
 
 **Por que uma classe de serviço e não uma classe por caso de uso?** Os casos de uso de ingestão compartilham as mesmas dependências (unit of work, parser, limites) e são pequenos. Um serviço coeso mantém o composition root simples. Quando um caso de uso crescer (recuperação, avaliação), ganha seu próprio serviço.
 
+## `IndexingService`
+
+| Caso de uso | Comportamento |
+|-------------|---------------|
+| `index_chunk_set(id, key, rebuild=False)` | Vincula a coleção à spec do embedder e gera os embeddings dos chunks pendentes lote a lote (`EMBEDDING_BATCH_SIZE`), com um commit por lote. Retorna um `IndexingReport` (total, já indexados, gerados agora, segundos) |
+| `index_chunk_set(..., rebuild=True)` | Apaga todos os vetores da coleção, desfaz o vínculo e indexa do zero com o modelo atual |
+| `status(id)` | `IndexStatus`: o vínculo e `embedded / total` de cada chunk set |
+
+Pontos de design:
+
+- **O provedor é chamado fora de qualquer transação.** Uma API de embeddings lenta nunca segura uma conexão nem locks no banco.
+- **Retomável por construção.** "Pendente" significa "chunk sem vetor", então rodar de novo após uma falha continua de onde parou. Não é preciso uma tabela de jobs.
+- **Os vetores são validados antes de gravar.** A quantidade precisa bater com o lote, e todo vetor precisa ter a dimensão vinculada. Caso contrário, `EmbeddingProviderError` indica qual configuração revisar (`EMBEDDING_DIMENSIONS`).
+- **Ação explícita, não no upload.** O upload continua rápido e funciona sem provedor. A indexação pode ser repetida por chunk set e cronometrada para o benchmark. Veja o [ADR-011](decisions.md#adr-011-indexação-explícita-e-retomável).
+- **Loop limitado.** O loop de lotes roda no máximo `ceil(pendentes / lote) + 1` vezes, então um armazenamento com defeito nunca prende o processo em um loop infinito.
+
 ## Ports
 
 ### `DocumentParser`
@@ -45,7 +63,18 @@ Retorna o texto canônico, os elementos estruturais e os metadados, ou lança `U
 | `CollectionRepository` | Adicionar, atualizar, buscar por id ou nome, listar |
 | `DocumentRepository` | Adicionar, buscar **(collection_id, document_id)**, listar por coleção, buscar por hash |
 | `ChunkRepository` | Substituir os chunks de um documento em um chunk set; listar um chunk set (opcionalmente de um documento) |
-| `UnitOfWork` | Context manager que expõe os três repositórios; `commit()` torna as mudanças visíveis, e sair do bloco sem commit desfaz tudo |
+| `EmbeddingRepository` | Chunks pendentes de um chunk set, gravar vetores, contar, apagar todos os vetores de uma coleção |
+| `UnitOfWork` | Context manager que expõe os repositórios; `commit()` torna as mudanças visíveis, e sair do bloco sem commit desfaz tudo |
+
+### `Embedder`
+
+```python
+spec: EmbeddingSpec
+def embed_documents(self, texts: Sequence[str]) -> list[list[float]]
+def embed_query(self, text: str) -> list[float]
+```
+
+As implementações encapsulam as falhas do provedor em `EmbeddingProviderError`. O método de consulta é usado a partir da Fase 3 (recuperação).
 
 **O isolamento está nas assinaturas.** Nenhum método de leitura retorna documentos ou chunks sem um `collection_id`. Quem chama não tem como "esquecer o filtro", porque não existe método sem filtro.
 
@@ -62,7 +91,8 @@ Retorna o texto canônico, os elementos estruturais e os metadados, ou lança `U
 | Erro | Significado | HTTP |
 |------|-------------|------|
 | `NotFoundError` | A entidade não existe **ou pertence a outra coleção** | 404 |
-| `ConflictError` | Nome de coleção ou chunk set duplicado | 409 |
+| `ConflictError` | Nome de coleção ou chunk set duplicado; coleção vinculada a outro modelo de embeddings | 409 |
+| `EmbeddingProviderError` | A API de embeddings falhou, estava inacessível ou retornou vetores do tamanho errado | 502 |
 | `UploadTooLargeError` | Arquivo maior que `MAX_UPLOAD_MB` | 413 |
 | `UnsupportedDocumentError` | A extensão não é `.pdf`, `.md`, `.markdown` ou `.txt` | 415 |
 | `DocumentParsingError` | Tipo suportado, mas ilegível (corrompido, vazio, PDF escaneado sem texto) | 422 |

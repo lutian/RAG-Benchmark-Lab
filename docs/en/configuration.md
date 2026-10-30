@@ -36,7 +36,7 @@ docker compose up --build
 | `LLM_TEMPERATURE` | unset | Generation | Sent only when set. Startup fails if combined with a reasoning effort other than `none` (see below) |
 | `LLM_TIMEOUT_SECONDS` | `60` | Generation | Request timeout |
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | OpenAI | Indexing (phase 2) | Any OpenAI-compatible `/embeddings` endpoint |
-| `EMBEDDING_DIMENSIONS` | `1536` | Indexing | Must match the model (e.g. `768` for `nomic-embed-text`) |
+| `EMBEDDING_DIMENSIONS` | `1536` | Indexing | Must match the model (e.g. `768` for `nomic-embed-text`). Not sent to the provider: used to validate returned vectors and bind the collection |
 | `EMBEDDING_BATCH_SIZE` | `64` | Indexing | Texts per embeddings request |
 | `RERANKER_PROVIDER` | `local` | Reranking (phase 4) | `local` (cross-encoder in-process) or `api` (HTTP `/rerank`) |
 | `RERANKER_MODEL` / `RERANKER_BASE_URL` / `RERANKER_API_KEY` | MiniLM cross-encoder | Reranking | URL and key only for `api` |

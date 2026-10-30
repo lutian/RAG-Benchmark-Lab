@@ -17,12 +17,12 @@ Assumptions (not user-stated): indexing is an explicit action (not on upload); p
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S3 | inline | pending | |
-| T2 | S1 S3 S4 | inline | pending | |
-| T3 | S1 S4 | inline | pending | |
-| T4 | S2 | inline | pending | |
-| T5 | S1 S2 | inline | pending | |
-| T6 | S5 | inline | pending | |
+| T1 | S3 | inline | done | eb3f939 |
+| T2 | S1 S3 S4 | inline | done | eb3f939 |
+| T3 | S1 S4 | inline | done | eb3f939 |
+| T4 | S2 | inline | done | 9a5faa5 |
+| T5 | S1 S2 | inline | done | 9a5faa5 |
+| T6 | S5 | inline | done | (this commit) |
 
 - T1 Domain: `EmbeddingSpec`, collection binding rules.
 - T2 Application: `Embedder` + `EmbeddingRepository` ports, `IndexingService` (batched, resumable, rebuild), in-memory adapter.
@@ -38,3 +38,6 @@ Route evidence: no Writer trigger reason (sequential, dependent units); parent w
 - L1 (2026-10-30, user): "3" — answering "Deixar como está e seguir para a Fase 2" after the whole-branch review exceeded the context budget.
 - L2 Environment: pgvector unavailable in the system Postgres; local verification uses `pgserver` (PostgreSQL + pgvector 0.6.2) in a scratch venv. Compose uses `pgvector/pgvector:pg17`.
 - L3 Discovery: `langchain-openai` 1.7.3 `OpenAIEmbeddings.check_embedding_ctx_length` defaults to True (tiktoken token ids sent instead of text); must be False for non-OpenAI providers.
+- L4 Verification: 136 passed without DB; contracts also passed against PostgreSQL + pgvector 0.6.2 (pgserver), 13 new tests incl. embedding isolation/binding/rebuild. `alembic check` no drift; 0002 downgrade/upgrade OK. ruff + mypy --strict clean. E2E: uvicorn + pgvector + local stub /v1/embeddings: upload -> index structure-800-120 (2 chunks embedded, 3d) -> status -> rows in chunk_embeddings. Not verified: a real provider (OpenAI/Ollama) and Docker Compose.
+- L5 Review: whole-branch candidate exceeded review budget earlier; user chose to leave it. Phase 2 commits pending assessment.
+- L6 `.env.example` cannot be edited from this environment (permission deny on `.env*`); EMBEDDING_* variables already present there.
