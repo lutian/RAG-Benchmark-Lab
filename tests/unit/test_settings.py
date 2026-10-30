@@ -136,7 +136,7 @@ def test_temperature_without_reasoning_effort_is_sent_for_classic_models(
     assert settings.llm_generation_options() == {"temperature": 0.0}
 
 
-@pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
+@pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high", "xhigh", "max"])
 def test_temperature_with_active_reasoning_effort_is_rejected(
     monkeypatch: pytest.MonkeyPatch, effort: str
 ) -> None:
