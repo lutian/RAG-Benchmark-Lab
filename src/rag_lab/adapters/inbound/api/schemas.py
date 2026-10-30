@@ -6,11 +6,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from rag_lab.application.services.indexing import IndexingReport, IndexStatus
 from rag_lab.application.services.ingestion import IngestionResult
 from rag_lab.domain.chunking import ChunkingConfig, ChunkingStrategy
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
+from rag_lab.domain.embeddings import EmbeddingSpec
 
 
 class ChunkingConfigIn(BaseModel):
@@ -44,6 +46,15 @@ class ChunkingConfigOut(BaseModel):
         )
 
 
+class EmbeddingOut(BaseModel):
+    model: str
+    dimensions: int
+
+    @classmethod
+    def from_domain(cls, spec: EmbeddingSpec | None) -> "EmbeddingOut | None":
+        return cls(model=spec.model, dimensions=spec.dimensions) if spec else None
+
+
 class CollectionIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     chunking_configs: list[ChunkingConfigIn] | None = Field(
@@ -57,6 +68,9 @@ class CollectionOut(BaseModel):
     name: str
     created_at: datetime
     chunking_configs: list[ChunkingConfigOut]
+    embedding: EmbeddingOut | None = Field(
+        description="Embedding model the collection is bound to (null until first indexed)."
+    )
 
     @classmethod
     def from_domain(cls, collection: Collection) -> "CollectionOut":
@@ -67,6 +81,7 @@ class CollectionOut(BaseModel):
             chunking_configs=[
                 ChunkingConfigOut.from_domain(c) for c in collection.chunking_configs
             ],
+            embedding=EmbeddingOut.from_domain(collection.embedding),
         )
 
 
@@ -159,4 +174,47 @@ class ChunkOut(BaseModel):
             text=chunk.text,
             page_numbers=list(chunk.page_numbers),
             section_path=list(chunk.section_path),
+        )
+
+
+class IndexingReportOut(BaseModel):
+    config_key: str
+    embedding: EmbeddingOut
+    total: int = Field(description="Chunks in the chunk set.")
+    already_indexed: int = Field(description="Chunks that already had a vector.")
+    embedded: int = Field(description="Chunks embedded by this run.")
+    seconds: float
+
+    @classmethod
+    def from_report(cls, report: IndexingReport) -> "IndexingReportOut":
+        return cls(
+            config_key=report.config_key,
+            embedding=EmbeddingOut(
+                model=report.embedding.model, dimensions=report.embedding.dimensions
+            ),
+            total=report.total,
+            already_indexed=report.already_indexed,
+            embedded=report.embedded,
+            seconds=report.seconds,
+        )
+
+
+class ChunkSetStatusOut(BaseModel):
+    config_key: str
+    total: int
+    embedded: int
+
+
+class IndexStatusOut(BaseModel):
+    embedding: EmbeddingOut | None
+    chunk_sets: list[ChunkSetStatusOut]
+
+    @classmethod
+    def from_status(cls, status: IndexStatus) -> "IndexStatusOut":
+        return cls(
+            embedding=EmbeddingOut.from_domain(status.embedding),
+            chunk_sets=[
+                ChunkSetStatusOut(config_key=s.config_key, total=s.total, embedded=s.embedded)
+                for s in status.chunk_sets
+            ],
         )

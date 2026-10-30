@@ -60,6 +60,12 @@ class FakeClient:
             }
         ]
 
+    def index_status(self, collection_id: str) -> dict[str, Any]:
+        return {
+            "embedding": {"model": "nomic-embed-text", "dimensions": 768},
+            "chunk_sets": [{"config_key": "structure-800-120", "total": 40, "embedded": 12}],
+        }
+
 
 @pytest.fixture(autouse=True)
 def fake_api(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,3 +92,12 @@ def test_shows_empty_state_without_collections(monkeypatch: pytest.MonkeyPatch) 
 
     assert not app.exception
     assert any("Create a collection" in info.value for info in app.info)
+
+
+def test_shows_indexing_progress_and_embedding_binding() -> None:
+    app = AppTest.from_file(PAGE).run()
+
+    rendered = " ".join(md.value for md in app.markdown)
+    assert "12 / 40 chunks embedded" in rendered
+    assert "nomic-embed-text (768d)" in rendered
+    assert any(button.label == "Index chunk set" for button in app.button)

@@ -1,5 +1,6 @@
 """Relational schema. Alembic migrations in ``migrations/`` create exactly these tables."""
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -16,7 +17,6 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
-from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 metadata = MetaData()

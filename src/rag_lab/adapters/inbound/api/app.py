@@ -3,10 +3,11 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from rag_lab.adapters.inbound.api.routes import collections
+from rag_lab.adapters.inbound.api.routes import collections, indexing
 from rag_lab.application.errors import (
     ConflictError,
     DocumentParsingError,
+    EmbeddingProviderError,
     NotFoundError,
     RagLabError,
     UnsupportedDocumentError,
@@ -22,6 +23,7 @@ _STATUS_BY_ERROR: tuple[tuple[type[RagLabError], int], ...] = (
     (UploadTooLargeError, status.HTTP_413_CONTENT_TOO_LARGE),
     (UnsupportedDocumentError, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE),
     (DocumentParsingError, status.HTTP_422_UNPROCESSABLE_CONTENT),
+    (EmbeddingProviderError, status.HTTP_502_BAD_GATEWAY),
 )
 
 
@@ -54,4 +56,5 @@ def create_app(container: Container | None = None) -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(collections.router)
+    app.include_router(indexing.router)
     return app

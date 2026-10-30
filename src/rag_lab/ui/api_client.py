@@ -7,6 +7,8 @@ import streamlit as st
 
 from rag_lab.config import get_settings
 
+INDEXING_TIMEOUT_SECONDS = 1800.0
+
 
 class ApiError(Exception):
     """The API answered with an error status; ``str(error)`` is its ``detail``."""
@@ -70,6 +72,22 @@ class ApiClient:
         result: list[dict[str, Any]] = self._request(
             "GET", f"/collections/{collection_id}/chunk-sets/{config_key}/chunks", params=params
         )
+        return result
+
+    def index_chunk_set(
+        self, collection_id: str, config_key: str, rebuild: bool = False
+    ) -> dict[str, Any]:
+        # Indexing calls the embeddings provider for every chunk: allow a long timeout.
+        result: dict[str, Any] = self._request(
+            "POST",
+            f"/collections/{collection_id}/chunk-sets/{config_key}/index",
+            params={"rebuild": rebuild},
+            timeout=INDEXING_TIMEOUT_SECONDS,
+        )
+        return result
+
+    def index_status(self, collection_id: str) -> dict[str, Any]:
+        result: dict[str, Any] = self._request("GET", f"/collections/{collection_id}/index")
         return result
 
 

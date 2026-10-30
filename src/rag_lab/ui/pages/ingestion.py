@@ -111,6 +111,37 @@ with preview_column:
         "Preview document", list(by_id), format_func=lambda i: by_id[i]["filename"]
     )
     config_key = st.selectbox("Chunk set", chunk_set_keys)
+
+    # --- indexing: progress, binding and the action that embeds the chunk set ---------
+    try:
+        index = client.index_status(collection["id"])
+    except api_client.ApiError as error:
+        _fail(error)
+    progress = next(s for s in index["chunk_sets"] if s["config_key"] == config_key)
+    binding = index["embedding"]
+    model = (
+        f"{html.escape(binding['model'])} ({binding['dimensions']}d)" if binding else "not indexed"
+    )
+    st.markdown(
+        f'<div class="rl-card-meta">{progress["embedded"]} / {progress["total"]} chunks embedded'
+        f'<span class="rl-badge neutral">{model}</span></div>',
+        unsafe_allow_html=True,
+    )
+    action, option = st.columns([1, 2])
+    rebuild = option.checkbox(
+        "Rebuild (drop every vector of this collection and re-embed)", value=False
+    )
+    if action.button("Index chunk set", type="primary"):
+        with st.spinner("Embedding chunks…"):
+            try:
+                report = client.index_chunk_set(collection["id"], config_key, rebuild)
+                st.success(
+                    f"Embedded {report['embedded']} chunks in {report['seconds']} s "
+                    f"({report['total']} total)"
+                )
+            except (api_client.ApiError, httpx.HTTPError) as error:
+                st.error(f"Indexing failed: {error}")
+
     try:
         detail = client.get_document(collection["id"], document_id)
         chunks = client.list_chunks(collection["id"], config_key, document_id)
