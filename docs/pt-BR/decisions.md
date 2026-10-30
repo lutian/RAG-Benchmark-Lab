@@ -1,0 +1,100 @@
+# Registros de decisões de arquitetura (ADRs)
+
+Cada registro apresenta primeiro a decisão e depois as alternativas descartadas e o motivo. Status: **Aceita** (implementada), **Planejada** (acordada, implementada em uma fase futura).
+
+> Outros idiomas: [English](../en/decisions.md)
+
+| ADR | Decisão | Status |
+|-----|---------|--------|
+| [001](#adr-001-arquitetura-hexagonal) | Arquitetura hexagonal | Aceita |
+| [002](#adr-002-camada-de-referência-independente-do-chunking) | Camada de referência independente do chunking (spans de caracteres) | Aceita |
+| [003](#adr-003-tamanho-do-chunk-em-caracteres) | Tamanho do chunk medido em caracteres | Aceita |
+| [004](#adr-004-chunkers-próprios-langchain-na-borda-dos-provedores) | Chunkers próprios; LangChain só na borda dos provedores | Aceita |
+| [005](#adr-005-postgresql-para-tudo) | PostgreSQL + pgvector para documentos, vetores e full-text | Aceita (vetores planejados) |
+| [006](#adr-006-provedores-compatíveis-com-openai-configurados-no-env) | Provedores compatíveis com OpenAI configurados no `.env` | Aceita (clientes planejados) |
+| [007](#adr-007-streamlit-com-css-customizado) | Streamlit com CSS customizado | Aceita |
+| [008](#adr-008-coleções-como-fronteira-de-isolamento) | Coleções como fronteira de isolamento | Aceita |
+| [009](#adr-009-cross-encoder-local-e-adaptador-de-api-de-rerank) | Cross-encoder local e adaptador de API `/rerank` | Planejada |
+| [010](#adr-010-perguntas-golden-sintéticas-com-revisão-humana) | Perguntas golden sintéticas com revisão humana | Planejada |
+
+---
+
+## ADR-001: Arquitetura hexagonal
+
+**Decisão:** domínio → aplicação (casos de uso + ports) → adaptadores, conectados em um único composition root.
+
+**Por quê:** o projeto existe para *comparar* estratégias e provedores. Os ports transformam cada um deles em uma implementação substituível, enquanto a lógica central que está sendo medida fica fixa. Isso também permite que a maioria dos testes rode sem infraestrutura.
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| MVC em camadas ao redor do FastAPI | As regras de negócio acabam nas rotas e nos modelos do ORM; trocar o armazenamento ou o provedor afeta tudo |
+| App centrada no LangChain (chains em tudo) | Começa rápido, mas o framework vira a arquitetura; difícil de testar e de explicar cada etapa |
+
+## ADR-002: Camada de referência independente do chunking
+
+**Decisão:** processar cada documento uma vez em um texto canônico. Armazenar páginas, seções, parágrafos, chunks e (depois) rótulos golden como spans `[início, fim)` sobre ele, e medir a relevância pela sobreposição dos spans.
+
+**Por quê:** rótulos golden presos a ids de chunk quebram sempre que o chunking muda, o que torna impossível uma matriz chunking × recuperação. Com spans, os rótulos são permanentes e os chunk sets são descartáveis.
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| Rotular ids de chunk | Os rótulos precisam ser refeitos para cada configuração de chunking |
+| Rotular apenas documentos | Grosso demais: um PDF de 50 páginas é "relevante" para qualquer pergunta sobre ele |
+| Associar por similaridade de texto | Impreciso e não reproduzível; os limiares viram uma variável oculta |
+
+## ADR-003: Tamanho do chunk em caracteres
+
+**Decisão:** `chunk_size` e `chunk_overlap` contam caracteres.
+
+**Por quê:** a contagem de tokens depende do tokenizer de cada modelo de embeddings. Caracteres mantêm os chunk sets idênticos entre provedores, então comparar provedores de embeddings compara apenas os embeddings. **Trade-off:** o tamanho em tokens varia um pouco entre modelos. Isso é aceitável, porque os limites ficam bem acima dos tamanhos típicos.
+
+## ADR-004: Chunkers próprios, LangChain na borda dos provedores
+
+**Decisão:** os algoritmos de chunking são escritos no domínio e são exatos nos offsets por construção. O LangChain é usado nos adaptadores, para os clientes de LLM e de embeddings (fases 2 e 5).
+
+**Por quê:** offsets exatos são a base do ADR-002. Os splitters de bibliotecas retornam strings e recuperam os offsets depois. Escrever cerca de 150 linhas testadas sai mais barato do que contornar isso.
+
+## ADR-005: PostgreSQL para tudo
+
+**Decisão:** um único PostgreSQL guarda a camada de referência, os embeddings com pgvector (fase 2) e os índices full-text (fase 3). O acesso é via SQLAlchemy Core, e as migrações via Alembic.
+
+**Por quê:** recuperação vetorial, lexical e híbrida rodam no mesmo motor, então as comparações de latência são justas, e uma consulta híbrida pode ser um único comando SQL. Um único serviço também mantém o `docker compose up` simples.
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| Banco vetorial dedicado (Qdrant, Weaviate) + Elasticsearch | Dois serviços a mais; a latência entre motores distorce a comparação |
+| ORM do SQLAlchemy | As entidades de domínio são dataclasses congeladas; o ORM exige classes mapeadas mutáveis ou modelos duplicados |
+| `Base.metadata.create_all()` | Sem histórico de schema; o Alembic oferece migrações versionadas e revisáveis |
+
+## ADR-006: Provedores compatíveis com OpenAI configurados no `.env`
+
+**Decisão:** LLM e embeddings são chamados pela API compatível com OpenAI, com `*_BASE_URL`, `*_API_KEY` e `*_MODEL` vindos do `.env` e configurados de forma independente.
+
+**Por quê:** um único protocolo cobre OpenAI, OpenRouter, Ollama, llama.cpp, vLLM e outros. Trocar de provedor é mudar configuração, exatamente o que um laboratório de benchmark precisa. **Consequência:** as coleções ficam vinculadas ao modelo e à dimensão de embeddings usados na indexação.
+
+## ADR-007: Streamlit com CSS customizado
+
+**Decisão:** Streamlit para a UI, estilizado conforme o design de referência (fundo branco, destaque `#2563EB`, Inter, cards, badges, evidências destacadas). A UI é um cliente HTTP da API.
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| React / Next.js | Mais fiel ao design pixel a pixel, mas traz uma segunda linguagem e toolchain para um projeto cujo núcleo é recuperação |
+| Streamlit importando os serviços diretamente | Acopla UI e núcleo; a API deixaria de ser o único ponto de entrada testado |
+
+## ADR-008: Coleções como fronteira de isolamento
+
+**Decisão:** toda leitura recebe um `collection_id` no nível do port. Acesso entre coleções retorna 404. Testes de contrato provam isso em todos os adaptadores.
+
+**Por quê:** "zero falhas críticas de isolamento" é uma meta do projeto. Colocar o escopo na *assinatura* torna o vazamento impossível por construção, em vez de depender de lembrar de um filtro. Autenticação multi-tenant ficou fora do MVP de propósito.
+
+## ADR-009: Cross-encoder local e adaptador de API de rerank
+
+**Decisão (planejada, fase 4):** o reranker padrão é um cross-encoder do Sentence Transformers (`cross-encoder/ms-marco-MiniLM-L-6-v2`) rodando no processo. Um segundo adaptador chama endpoints HTTP `/rerank` (estilo Jina/Cohere, TEI, llama.cpp, vLLM). A escolha vem de `RERANKER_PROVIDER`.
+
+**Por quê:** a API da OpenAI não tem endpoint de rerank. Um modelo local pequeno funciona offline em CPU, e o adaptador de API evita levar o torch para a imagem quando já existe um serviço de rerank.
+
+## ADR-010: Perguntas golden sintéticas com revisão humana
+
+**Decisão (planejada, fase 6):** o LLM propõe perguntas a partir de trechos amostrados; o trecho de origem vira o span rotulado; uma tela no Streamlit permite que uma pessoa edite, aprove ou rejeite as perguntas e adicione as suas.
+
+**Por quê:** o corpus é arbitrário, então não existem rótulos de antemão. Perguntas totalmente sintéticas copiam a redação do trecho e inflam as pontuações lexicais (BM25). A revisão humana mantém o benchmark honesto.

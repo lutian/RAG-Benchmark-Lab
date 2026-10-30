@@ -1,0 +1,45 @@
+# Estratégia de testes
+
+O projeto é construído com **testes primeiro**: cada regra ganha um teste que falha (RED), depois o código que o faz passar (GREEN), depois uma refatoração com os testes continuando verdes.
+
+> Outros idiomas: [English](../en/testing.md)
+
+## Caminho rápido
+
+```bash
+uv sync                      # instala as dependências de desenvolvimento
+uv run pytest                # testes unitários + de contrato (os de PostgreSQL são pulados sem banco)
+make lint typecheck          # ruff + mypy --strict
+```
+
+Para rodar os testes de contrato com PostgreSQL usando um banco descartável:
+
+```bash
+docker compose up -d db
+TEST_DATABASE_URL=postgresql+psycopg://rag:rag@localhost:5432/rag_lab uv run pytest -m integration
+```
+
+> Os testes **truncam todas as tabelas** desse banco. Nunca aponte `TEST_DATABASE_URL` para dados importantes.
+
+## Pirâmide de testes
+
+| Nível | Local | O que prova | Velocidade |
+|-------|-------|-------------|------------|
+| Unitário de domínio | `tests/unit/domain/` | Matemática de spans, invariantes de documento, algoritmos de chunking | ms |
+| Baseado em propriedades | `tests/unit/domain/test_chunkers.py` | Invariantes do chunking para **qualquer** texto e configuração (Hypothesis) | < 1 s |
+| Unitário de adaptadores | `tests/unit/adapters/` | Parsers sobre bytes reais de PDF (gerados com fpdf2), contrato da API via `TestClient` | ms |
+| Aplicação | `tests/unit/application/` | Regras dos casos de uso (deduplicação, limite de tamanho, chunking retroativo, atomicidade) | ms |
+| Contrato | `tests/contracts/` | **Os mesmos testes contra memória e PostgreSQL**: isolamento, transações, ida e volta da camada de referência | s |
+| UI | `tests/unit/ui/` | Páginas renderizam com uma API falsa (`streamlit.testing.AppTest`); renderização dos destaques | ms |
+
+## Por que testes de contrato?
+
+O store em memória deixa a maioria dos testes rápida. Mas testes rápidos só são confiáveis se o dublê se comporta como o real, então a suíte de contrato é parametrizada para os dois adaptadores. Se o PostgreSQL e a memória divergirem (ordenação, rollback, isolamento), a suíte falha.
+
+## Por que testes baseados em propriedades para o chunking?
+
+Testes por exemplos cobrem os casos em que pensamos. Os bugs de chunking se escondem nos casos em que ninguém pensou: sequências de espaços, chunk de tamanho 1, overlap quase igual ao tamanho, caracteres acentuados. O Hypothesis gera centenas dessas entradas e verifica as quatro invariantes (fatias exatas, limite de tamanho, nenhum conteúdo perdido, ordem de leitura) em toda execução.
+
+## CI
+
+`.github/workflows/ci.yml` roda em todo push e PR: `uv sync --frozen` → ruff (lint + checagem de formatação) → mypy strict → pytest com cobertura, contra um container de serviço `pgvector/pgvector:pg17`. Por isso, no CI, os testes de contrato sempre rodam contra um PostgreSQL real.
