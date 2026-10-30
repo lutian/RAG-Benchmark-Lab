@@ -24,11 +24,12 @@ class MediaType(StrEnum):
 class ElementKind(StrEnum):
     PAGE = "page"
     SECTION = "section"
+    PARAGRAPH = "paragraph"
 
 
 @dataclass(frozen=True, slots=True)
 class StructuralElement:
-    """A page or a section of the canonical text.
+    """A page, section or paragraph of the canonical text.
 
     Sections cover only their own content (up to the next heading of any level);
     ``path`` carries the heading breadcrumb, e.g. ``("Install", "Docker")``.
