@@ -40,3 +40,35 @@ class FakeEmbedder:
         size = self._spec.dimensions + (1 if self._wrong_dimensions else 0)
         digest = hashlib.sha256(text.encode()).digest()
         return [digest[i % len(digest)] / 255 for i in range(size)]
+
+
+class ConceptEmbedder:
+    """Embeds texts as counts of *concepts*: words mapped to the same dimension.
+
+    Synonyms share a dimension, so vector search can match a paraphrase that
+    full-text search misses — the behaviour the retrieval tests need to observe.
+    Texts with no known word map to a small constant vector (never all zeros).
+    """
+
+    def __init__(self, concepts: dict[str, int], dimensions: int, model: str = "concepts") -> None:
+        self._spec = EmbeddingSpec(model, dimensions)
+        self._concepts = concepts
+        self.queries: list[str] = []
+
+    @property
+    def spec(self) -> EmbeddingSpec:
+        return self._spec
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        return [self._vector(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        self.queries.append(text)
+        return self._vector(text)
+
+    def _vector(self, text: str) -> list[float]:
+        vector = [0.01] * self._spec.dimensions
+        for word in text.lower().replace(".", " ").replace(",", " ").split():
+            if word in self._concepts:
+                vector[self._concepts[word]] += 1.0
+        return vector

@@ -11,7 +11,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
-from rag_lab.application.errors import ConflictError, NotFoundError, UploadTooLargeError
+from rag_lab.application.errors import (
+    ConflictError,
+    InvalidRequestError,
+    NotFoundError,
+    UploadTooLargeError,
+)
 from rag_lab.application.ports.parsing import DocumentParser
 from rag_lab.application.ports.repositories import UnitOfWork
 from rag_lab.domain.chunking import ChunkingConfig, chunk_document
@@ -41,9 +46,15 @@ class IngestionService:
     # --- collections -------------------------------------------------------------------
 
     def create_collection(
-        self, name: str, chunking_configs: tuple[ChunkingConfig, ...] = ()
+        self,
+        name: str,
+        chunking_configs: tuple[ChunkingConfig, ...] = (),
+        fulltext_language: str = "english",
     ) -> Collection:
-        collection = Collection.create(name, chunking_configs)
+        try:
+            collection = Collection.create(name, chunking_configs, fulltext_language)
+        except ValueError as error:
+            raise InvalidRequestError(str(error)) from error
         with self._uow_factory() as uow:
             if uow.collections.get_by_name(collection.name):
                 raise ConflictError(f"collection {collection.name!r} already exists")

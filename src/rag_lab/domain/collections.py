@@ -17,23 +17,52 @@ class EmbeddingMismatchError(ValueError):
     """The collection is already indexed with a different embedding spec."""
 
 
+# Text search configurations shipped with PostgreSQL. "simple" lowercases without
+# stemming or stop words: a language-neutral baseline for mixed corpora.
+FULLTEXT_LANGUAGES = frozenset(
+    {
+        "simple", "arabic", "armenian", "basque", "catalan", "danish", "dutch", "english",
+        "finnish", "french", "german", "greek", "hindi", "hungarian", "indonesian", "irish",
+        "italian", "lithuanian", "nepali", "norwegian", "portuguese", "romanian", "russian",
+        "serbian", "spanish", "swedish", "tamil", "turkish", "yiddish",
+    }
+)  # fmt: skip
+
+
 @dataclass(frozen=True, slots=True)
 class Collection:
     id: UUID
     name: str
     chunking_configs: tuple[ChunkingConfig, ...] = ()
     embedding: EmbeddingSpec | None = None
+    # Stemming and stop words for full-text search; fixed once documents are indexed.
+    fulltext_language: str = "english"
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @classmethod
-    def create(cls, name: str, chunking_configs: tuple[ChunkingConfig, ...] = ()) -> "Collection":
+    def create(
+        cls,
+        name: str,
+        chunking_configs: tuple[ChunkingConfig, ...] = (),
+        fulltext_language: str = "english",
+    ) -> "Collection":
         cleaned = name.strip()
         if not cleaned:
             raise ValueError("collection name is required")
         keys = [config.key for config in chunking_configs]
         if len(keys) != len(set(keys)):
             raise ValueError("chunking configs must be unique")
-        return cls(id=uuid4(), name=cleaned, chunking_configs=chunking_configs)
+        if fulltext_language not in FULLTEXT_LANGUAGES:
+            raise ValueError(
+                f"unknown full-text language {fulltext_language!r}; "
+                f"use one of {', '.join(sorted(FULLTEXT_LANGUAGES))}"
+            )
+        return cls(
+            id=uuid4(),
+            name=cleaned,
+            chunking_configs=chunking_configs,
+            fulltext_language=fulltext_language,
+        )
 
     def with_chunking_config(self, config: ChunkingConfig) -> "Collection":
         if config in self.chunking_configs:

@@ -4,7 +4,10 @@ It honours the same contract as the PostgreSQL adapter (verified by the shared
 contract tests), including rollback when a transaction is not committed.
 """
 
-from collections.abc import Sequence
+import math
+import re
+from collections import Counter
+from collections.abc import Sequence, Set
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Self
@@ -13,6 +16,7 @@ from uuid import UUID
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
+from rag_lab.domain.retrieval import ScoredChunk
 
 ChunkKey = tuple[UUID, str, UUID]
 VectorKey = tuple[UUID, str, UUID, int]
@@ -141,6 +145,69 @@ class InMemoryEmbeddingRepository:
             del self._state.vectors[key]
 
 
+class InMemorySearchRepository:
+    """Brute-force search with the same ranking contract as PostgreSQL.
+
+    Full-text matching lowercases and splits on word characters; it ignores the
+    collection language (no stemming or stop words). Contract tests only rely on
+    behaviour both adapters share.
+    """
+
+    def __init__(self, state: _State) -> None:
+        self._state = state
+
+    def _chunks(
+        self, collection_id: UUID, config_key: str, document_ids: Set[UUID] | None
+    ) -> list[Chunk]:
+        chunks = InMemoryChunkRepository(self._state).list(collection_id, config_key)
+        return [c for c in chunks if document_ids is None or c.document_id in document_ids]
+
+    def vector(
+        self,
+        collection_id: UUID,
+        config_key: str,
+        query_vector: Sequence[float],
+        limit: int,
+        document_ids: Set[UUID] | None = None,
+    ) -> list[ScoredChunk]:
+        scored = []
+        for chunk in self._chunks(collection_id, config_key, document_ids):
+            stored = self._state.vectors.get(
+                InMemoryEmbeddingRepository._key(collection_id, config_key, chunk)
+            )
+            if stored is not None:
+                scored.append(ScoredChunk(chunk, _cosine(query_vector, stored[1])))
+        return sorted(scored, key=lambda s: s.score, reverse=True)[:limit]
+
+    def fulltext(
+        self,
+        collection_id: UUID,
+        config_key: str,
+        query: str,
+        limit: int,
+        document_ids: Set[UUID] | None = None,
+    ) -> list[ScoredChunk]:
+        terms = set(_words(query))
+        scored = []
+        for chunk in self._chunks(collection_id, config_key, document_ids):
+            words = _words(chunk.text)
+            counts = Counter(words)
+            hits = sum(counts[term] for term in terms)
+            if hits:
+                # Same length normalisation as ts_rank_cd(..., 1): divide by 1 + log(length).
+                scored.append(ScoredChunk(chunk, hits / (1 + math.log(len(words)))))
+        return sorted(scored, key=lambda s: s.score, reverse=True)[:limit]
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"\w+", text.lower())
+
+
+def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
+    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    return sum(x * y for x, y in zip(a, b, strict=True)) / norm if norm else 0.0
+
+
 class InMemoryUnitOfWork:
     """Keeps a committed state; each ``with`` block works on a copy until commit."""
 
@@ -154,6 +221,7 @@ class InMemoryUnitOfWork:
         self.documents = InMemoryDocumentRepository(state)
         self.chunks = InMemoryChunkRepository(state)
         self.embeddings = InMemoryEmbeddingRepository(state)
+        self.search = InMemorySearchRepository(state)
 
     def __enter__(self) -> Self:
         self._bind(self._committed.copy())

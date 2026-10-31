@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 
 metadata = MetaData()
 
@@ -30,6 +30,8 @@ collections = Table(
     # Embedding binding: set on first indexing, both NULL or both set.
     Column("embedding_model", Text, nullable=True),
     Column("embedding_dimensions", Integer, nullable=True),
+    # PostgreSQL text search configuration used for every chunk of the collection.
+    Column("fulltext_language", Text, nullable=False, server_default="english"),
     CheckConstraint(
         "(embedding_model IS NULL) = (embedding_dimensions IS NULL)",
         name="ck_collections_embedding_pair",
@@ -109,6 +111,8 @@ chunks = Table(
     Column("text", Text, nullable=False),
     Column("page_numbers", ARRAY(Integer), nullable=False),
     Column("section_path", ARRAY(Text), nullable=False),
+    # to_tsvector(<collection language>, text), computed on insert by the repository.
+    Column("search_vector", TSVECTOR, nullable=False),
     ForeignKeyConstraint(
         ["collection_id", "config_key"],
         ["chunking_configs.collection_id", "chunking_configs.key"],
@@ -118,6 +122,7 @@ chunks = Table(
     UniqueConstraint("document_id", "config_key", "chunk_index", name="uq_chunks_position"),
     CheckConstraint("start_offset >= 0 AND end_offset > start_offset", name="ck_chunk_span"),
     Index("ix_chunks_chunk_set", "collection_id", "config_key"),
+    Index("ix_chunks_search_vector", "search_vector", postgresql_using="gin"),
 )
 
 # Vectors live in their own table so a rebuild with another model is a plain DELETE.

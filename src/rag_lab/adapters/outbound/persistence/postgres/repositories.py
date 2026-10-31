@@ -1,10 +1,27 @@
 """Repository implementations over a SQLAlchemy connection owned by the unit of work."""
 
-from collections.abc import Sequence
+from collections.abc import Sequence, Set
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Connection, Row, delete, func, insert, select, tuple_, update
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import (
+    ColumnElement,
+    Connection,
+    Row,
+    Select,
+    Text,
+    bindparam,
+    cast,
+    delete,
+    func,
+    insert,
+    literal,
+    select,
+    tuple_,
+    update,
+)
+from sqlalchemy.dialects.postgresql import REGCONFIG, TSQUERY
 from sqlalchemy.exc import IntegrityError
 
 from rag_lab.adapters.outbound.persistence.postgres import tables as t
@@ -14,6 +31,7 @@ from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document, ElementKind, MediaType, StructuralElement
 from rag_lab.domain.embeddings import EmbeddingSpec
+from rag_lab.domain.retrieval import ScoredChunk
 from rag_lab.domain.spans import Span
 
 
@@ -36,7 +54,10 @@ class PostgresCollectionRepository:
         _write(
             self._connection,
             insert(t.collections).values(
-                id=collection.id, name=collection.name, created_at=collection.created_at
+                id=collection.id,
+                name=collection.name,
+                fulltext_language=collection.fulltext_language,
+                created_at=collection.created_at,
             ),
         )
         self._save_embedding(collection)
@@ -121,6 +142,7 @@ class PostgresCollectionRepository:
                 if row.embedding_model is not None
                 else None
             ),
+            fulltext_language=row.fulltext_language,
             created_at=row.created_at,
         )
 
@@ -232,9 +254,17 @@ class PostgresChunkRepository:
         )
         if not chunks:
             return
+        language = self._connection.scalar(
+            select(t.collections.c.fulltext_language).where(t.collections.c.id == collection_id)
+        )
+        statement = insert(t.chunks).values(
+            search_vector=func.to_tsvector(
+                literal(language or "simple", REGCONFIG), bindparam("search_text", type_=Text)
+            )
+        )
         _write(
             self._connection,
-            insert(t.chunks),
+            statement,
             [
                 {
                     "collection_id": collection_id,
@@ -246,6 +276,7 @@ class PostgresChunkRepository:
                     "text": chunk.text,
                     "page_numbers": list(chunk.page_numbers),
                     "section_path": list(chunk.section_path),
+                    "search_text": chunk.text,
                 }
                 for chunk in chunks
             ],
@@ -364,3 +395,81 @@ class PostgresEmbeddingRepository:
         self._connection.execute(
             delete(t.chunk_embeddings).where(t.chunk_embeddings.c.collection_id == collection_id)
         )
+
+
+class PostgresSearchRepository:
+    """Exact vector search (pgvector ``<=>``) and full-text search (``tsvector``)."""
+
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def vector(
+        self,
+        collection_id: UUID,
+        config_key: str,
+        query_vector: Sequence[float],
+        limit: int,
+        document_ids: Set[UUID] | None = None,
+    ) -> list[ScoredChunk]:
+        # Exact scan over the chunk set: no ANN approximation in benchmark results.
+        distance = t.chunk_embeddings.c.embedding.cosine_distance(
+            cast(list(query_vector), Vector())
+        )
+        query = (
+            select(t.chunks, (1 - distance).label("score"))
+            .join(t.chunk_embeddings, t.chunk_embeddings.c.chunk_id == t.chunks.c.id)
+            .where(
+                t.chunk_embeddings.c.collection_id == collection_id,
+                t.chunk_embeddings.c.config_key == config_key,
+            )
+            .order_by(distance)
+        )
+        return self._run(query, limit, document_ids)
+
+    def fulltext(
+        self,
+        collection_id: UUID,
+        config_key: str,
+        query: str,
+        limit: int,
+        document_ids: Set[UUID] | None = None,
+    ) -> list[ScoredChunk]:
+        language = (
+            select(t.collections.c.fulltext_language)
+            .where(t.collections.c.id == collection_id)
+            .scalar_subquery()
+        )
+        # plainto_tsquery ANDs every term, which is far too strict for questions;
+        # rewriting "a & b" as "a | b" keeps its normalisation but matches any term.
+        terms = cast(
+            func.replace(
+                cast(func.plainto_tsquery(cast(language, REGCONFIG), query), Text), " & ", " | "
+            ),
+            TSQUERY,
+        )
+        score = func.ts_rank_cd(t.chunks.c.search_vector, terms, 1)
+        statement = (
+            select(t.chunks, score.label("score"))
+            .where(
+                t.chunks.c.collection_id == collection_id,
+                t.chunks.c.config_key == config_key,
+                t.chunks.c.search_vector.op("@@")(terms),
+            )
+            .order_by(score.desc())
+        )
+        return self._run(statement, limit, document_ids)
+
+    def _run(
+        self, query: Select[Any], limit: int, document_ids: Set[UUID] | None
+    ) -> list[ScoredChunk]:
+        query = query.join(t.documents, t.documents.c.id == t.chunks.c.document_id).order_by(
+            # Deterministic ties: reading order.
+            t.documents.c.created_at,
+            t.documents.c.id,
+            t.chunks.c.chunk_index,
+        )
+        if document_ids is not None:
+            condition: ColumnElement[bool] = t.chunks.c.document_id.in_(list(document_ids))
+            query = query.where(condition)
+        rows = self._connection.execute(query.limit(limit))
+        return [ScoredChunk(_chunk_from_row(row), float(row.score)) for row in rows]

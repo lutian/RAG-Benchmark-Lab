@@ -8,6 +8,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from rag_lab.application.ports.embeddings import EmbeddingRepository
+from rag_lab.application.ports.search import SearchRepository
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
@@ -58,6 +59,8 @@ class UnitOfWork(Protocol):
     def chunks(self) -> ChunkRepository: ...
     @property
     def embeddings(self) -> EmbeddingRepository: ...
+    @property
+    def search(self) -> SearchRepository: ...
 
     def __enter__(self) -> Self: ...
 

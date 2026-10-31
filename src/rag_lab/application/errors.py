@@ -22,8 +22,12 @@ class NotFoundError(RagLabError):
 
 
 class ConflictError(RagLabError):
-    """The operation would violate a uniqueness rule (e.g. duplicate collection name)."""
+    """The operation conflicts with the current state (duplicate name, unindexed chunk set...)."""
 
 
 class EmbeddingProviderError(RagLabError):
     """The embeddings provider failed or returned vectors that do not match the spec."""
+
+
+class InvalidRequestError(RagLabError):
+    """The request is well-formed but its values cannot be used (e.g. a blank query)."""
