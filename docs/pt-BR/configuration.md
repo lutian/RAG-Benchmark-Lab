@@ -42,6 +42,9 @@ docker compose up --build
 | `RERANKER_MODEL` / `RERANKER_BASE_URL` / `RERANKER_API_KEY` | Cross-encoder MiniLM | Reranking | URL e chave só para `api` |
 | `MAX_UPLOAD_MB` | `25` | Ingestão | Arquivos maiores recebem HTTP 413 |
 | `DEFAULT_CHUNK_SIZE` / `DEFAULT_CHUNK_OVERLAP` | `800` / `120` | Ingestão | Em caracteres; padrões para novas coleções |
+| `DEFAULT_FULLTEXT_LANGUAGE` | `english` | Coleções | Configuração de busca textual do PostgreSQL para novas coleções (`portuguese`, `spanish`, `simple`…). Validada na inicialização |
+| `RETRIEVAL_CANDIDATES` | `50` | Recuperação | Chunks que cada método contribui antes da fusão híbrida |
+| `HYBRID_RRF_K` | `60` | Recuperação | Constante do Reciprocal Rank Fusion; valores maiores achatam a vantagem das primeiras posições |
 | `API_URL` | `http://localhost:8000` | UI | `http://api:8000` dentro do Compose |
 
 ## Receitas por provedor

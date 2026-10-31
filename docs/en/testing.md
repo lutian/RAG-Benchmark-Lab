@@ -36,7 +36,11 @@ TEST_DATABASE_URL=postgresql+psycopg://rag:rag@localhost:5432/rag_lab uv run pyt
 
 `tests/unit/adapters/embeddings/` starts a real HTTP server on `127.0.0.1` that speaks the `/v1/embeddings` protocol and records every request. The tests assert what actually goes over the wire: raw text (not token ids), batch boundaries, the model name, the `Authorization` header, no `dimensions` field. They also cover how 500 responses and unreachable hosts are reported. Mocking the SDK would not catch a LangChain default that changes the payload.
 
-Everything above the adapter uses `tests/fakes.py::FakeEmbedder`: deterministic vectors, with switches to fail on the n-th call or return the wrong dimension.
+Everything above the adapter uses `tests/fakes.py::FakeEmbedder`: deterministic vectors, with switches to fail on the n-th call or return the wrong dimension. Retrieval tests use `ConceptEmbedder`, which maps synonyms to the same dimension, so a test can show vector search finding a paraphrase ("car" → "automobile") that full-text search misses.
+
+## PostgreSQL-only behaviour
+
+`tests/integration/test_postgres_fulltext.py` covers what the in-memory store deliberately does not imitate: stemming and stop words per collection language (`rates` matches `rate` in `english` but not in `simple`; `banco` matches `bancos` in `portuguese`).
 
 ## Why contract tests?
 

@@ -12,6 +12,7 @@ O domínio é o vocabulário do laboratório: **spans, documentos, chunks, cole�
 | `documents.py` | Um documento processado e sua estrutura | `Document`, `StructuralElement`, `ElementKind`, `MediaType` |
 | `chunks.py` | Unidade recuperável derivada de um documento | `Chunk` |
 | `collections.py` | Fronteira de isolamento, chunk sets a construir, vínculo de embeddings | `Collection`, `EmbeddingMismatchError` |
+| `retrieval.py` | Métodos de busca, resultados com score e fusão de rankings | `SearchMethod`, `ScoredChunk`, `reciprocal_rank_fusion()` |
 | `embeddings.py` | Qual modelo gerou um vetor e seu tamanho | `EmbeddingSpec` |
 | `chunking/config.py` | Como fazer o chunking | `ChunkingConfig`, `ChunkingStrategy` |
 | `chunking/strategies.py` | Os algoritmos de chunking | `chunk_document()` |
@@ -59,6 +60,8 @@ Um span de um documento com metadados de localização desnormalizados (`page_nu
 
 Um conjunto nomeado de documentos, com a lista de `ChunkingConfig` com as quais cada documento é dividido (um **chunk set** por configuração). É a **fronteira de isolamento**: as consultas sempre têm escopo de uma coleção. As chaves de configuração precisam ser únicas, e `with_chunking_config()` retorna uma nova coleção (as entidades são imutáveis).
 
+Ela também guarda o seu **idioma de full-text** (`fulltext_language`, padrão `english`): a configuração de busca textual do PostgreSQL usada para reduzir palavras ao radical (stemming) e descartar stop words. Precisa ser uma das `FULLTEXT_LANGUAGES` (as configurações que vêm com o PostgreSQL, mais `simple`, sem stemming). É escolhido na criação e nunca muda, porque todos os chunks armazenados foram normalizados com ele.
+
 ## `EmbeddingSpec` e o vínculo de embeddings
 
 **O que é:** `EmbeddingSpec(model, dimensions)`, um value object validado (modelo não vazio, dimensão positiva).
@@ -97,3 +100,25 @@ Um conjunto nomeado de documentos, com a lista de `ChunkingConfig` com as quais 
 | `structure` | Seções e páginas são limites **rígidos** (nunca cruzados); unidades grandes demais são divididas recursivamente; parágrafos são limites **flexíveis** (os pequenos são unidos) | Chunks alinhados a títulos e páginas, então as citações são precisas | Tamanhos irregulares | Consciente da estrutura |
 
 **Por que implementar os chunkers em vez de usar os splitters do LangChain?** Os text splitters do LangChain retornam strings. O `start_index` opcional é reconstruído depois, procurando o texto de cada chunk no documento, ou seja, os offsets são *recuperados*, não *rastreados*. Offsets exatos são a base da camada de referência, então os algoritmos aqui são exatos por construção (cerca de 150 linhas, totalmente testadas). O LangChain é usado onde agrega valor: nos clientes de LLM e de embeddings das próximas fases. Veja o [ADR-004](decisions.md#adr-004-chunkers-próprios-langchain-na-borda-dos-provedores).
+
+## Recuperação — `SearchMethod` e Reciprocal Rank Fusion
+
+**O que é:** os três métodos que o laboratório compara (`vector`, `fulltext`, `hybrid`), o `ScoredChunk` que um método retorna (score maior é melhor) e `reciprocal_rank_fusion()`.
+
+**O que a fusão faz:** a busca híbrida recebe um ranking por método e pontua cada chunk com
+
+```
+score(chunk) = Σ sobre os rankings  1 / (k + posição do chunk naquele ranking)
+```
+
+Um chunk bem posicionado pelos **dois** métodos vence um chunk que ficou em primeiro em apenas um. Cada resultado fundido guarda a posição que cada método lhe deu (`{"vector": 7, "fulltext": 1}`), e é assim que a UI explica *por que* um chunk foi recuperado. Empates mantêm a ordem do primeiro ranking, então os resultados são determinísticos.
+
+**Por que RRF e não uma soma ponderada de scores?**
+
+| Opção | Problema |
+|-------|----------|
+| `α·cosseno + (1-α)·ts_rank` | Os scores estão em escalas sem relação (cosseno ∈ [-1, 1], `ts_rank_cd` sem limite e dependente do corpus); `α` precisaria de ajuste por corpus e por pergunta |
+| Normalização min-max e soma | Sensível a outliers; um chunk muito longo desloca o score normalizado de todos |
+| **RRF (escolhida)** | Usa só as posições, então não precisa de calibração; um único parâmetro (`k`, padrão 60 como no artigo original, `HYBRID_RRF_K`) |
+
+**Por que no domínio?** A fusão é aritmética pura sobre rankings. Mantê-la fora do SQL a torna idêntica para todos os adaptadores de armazenamento e testável em milissegundos.

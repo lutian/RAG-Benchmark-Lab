@@ -12,8 +12,8 @@ Não é um chatbot que lê PDFs. Você envia qualquer corpus. O laboratório o d
 |------|------------|--------|
 | 1. Ingestão | Upload, parsing (PDF/MD/TXT), metadados, chunking configurável, camada de referência independente do chunking | ✅ Concluída |
 | 2. Indexação | Embeddings de qualquer API compatível com OpenAI, persistidos no pgvector; retomável, coleções vinculadas ao modelo | ✅ Concluída |
-| 3. Recuperação | Busca vetorial, full-text e híbrida | ⏳ Próxima |
-| 4. Reranking | Cross-encoder local e API `/rerank` | Planejada |
+| 3. Recuperação | Busca vetorial exata, full-text do PostgreSQL (idioma por coleção) e híbrida com RRF; filtros, latência por etapa, posição por método | ✅ Concluída |
+| 4. Reranking | Cross-encoder local e API `/rerank` | ⏳ Próxima |
 | 5. Geração | Respostas fundamentadas com citações e abstenção | Planejada |
 | 6. Avaliação | Golden dataset, Recall@k, MRR, validade das citações | Planejada |
 | 7. Apresentação | Dashboard comparativo | Planejada |
@@ -35,7 +35,7 @@ docker compose up --build -d
 | API (FastAPI) | http://localhost:8000 · documentação interativa em http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (apenas loopback) |
 
-Abra a UI, crie uma coleção na barra lateral, envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set. Clique em **Index chunk set** para gerar os embeddings com o provedor configurado no `.env`.
+Abra a UI, crie uma coleção na barra lateral, envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set. Clique em **Index chunk set** para gerar os embeddings com o provedor configurado no `.env`. Na página **Retrieval**, faça uma pergunta e compare lado a lado os resultados vetoriais, full-text e híbridos.
 
 Modelos locais opcionais com Ollama:
 
@@ -64,6 +64,10 @@ curl -s "localhost:8000/collections/<collection_id>/chunk-sets/structure-800-120
 # 4. Gerar os embeddings de um chunk set (usa EMBEDDING_* do .env) e ver o progresso
 curl -s -X POST localhost:8000/collections/<collection_id>/chunk-sets/structure-800-120/index
 curl -s localhost:8000/collections/<collection_id>/index
+
+# 5. Buscar (method: vector | fulltext | hybrid)
+curl -s -X POST localhost:8000/collections/<collection_id>/search -H 'content-type: application/json' \
+     -d '{"query": "Qual é a política de reembolso?", "chunk_set": "structure-800-120", "method": "hybrid", "top_k": 5}'
 ```
 
 ## Desenvolvimento local (sem Docker para a aplicação)

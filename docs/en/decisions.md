@@ -10,7 +10,7 @@ Each record states the decision first, then the alternatives that were rejected 
 | [002](#adr-002-a-chunking-independent-reference-layer) | Chunking-independent reference layer (character spans) | Accepted |
 | [003](#adr-003-chunk-size-in-characters) | Chunk size measured in characters | Accepted |
 | [004](#adr-004-own-chunkers-langchain-at-the-provider-edge) | Own chunkers; LangChain only at the provider edge | Accepted |
-| [005](#adr-005-postgresql-for-everything) | PostgreSQL + pgvector for documents, vectors and full-text | Accepted (full-text planned) |
+| [005](#adr-005-postgresql-for-everything) | PostgreSQL + pgvector for documents, vectors and full-text | Accepted |
 | [006](#adr-006-openai-compatible-providers-configured-in-env) | OpenAI-compatible providers configured in `.env` | Accepted (embeddings done, chat planned) |
 | [007](#adr-007-streamlit-with-custom-css) | Streamlit with custom CSS | Accepted |
 | [008](#adr-008-collections-as-the-isolation-boundary) | Collections as the isolation boundary | Accepted |
@@ -18,6 +18,8 @@ Each record states the decision first, then the alternatives that were rejected 
 | [010](#adr-010-synthetic-golden-questions-with-human-review) | Synthetic golden questions with human review | Planned |
 | [011](#adr-011-explicit-resumable-indexing) | Explicit, resumable indexing with model-bound collections | Accepted |
 | [012](#adr-012-one-vector-table-without-a-fixed-dimension) | One vector table without a fixed dimension | Accepted |
+| [013](#adr-013-postgresql-full-text-as-the-lexical-baseline) | PostgreSQL full-text (OR query, `ts_rank_cd`) as the lexical method | Accepted |
+| [014](#adr-014-exact-vector-search-for-the-benchmark) | Exact vector search, no ANN index | Accepted |
 
 ---
 
@@ -118,10 +120,38 @@ Each record states the decision first, then the alternatives that were rejected 
 
 **Decision:** a single `chunk_embeddings` table with an untyped `vector` column, plus a `dimensions` column guarded by `CHECK (vector_dims(embedding) = dimensions)`.
 
-**Why:** collections are bound to different models (768, 1024, 1536… dimensions), and a typed column `vector(n)` would force one model for the whole database. **Trade-off:** HNSW indexes require a fixed dimension, so Phase 3 builds them per collection as partial expression indexes (`(embedding::vector(n)) … WHERE collection_id = …`).
+**Why:** collections are bound to different models (768, 1024, 1536… dimensions), and a typed column `vector(n)` would force one model for the whole database. **Trade-off:** HNSW indexes require a fixed dimension. Retrieval does not need one (see ADR-014); if a large deployment ever does, it can be built per collection as a partial expression index (`(embedding::vector(n)) … WHERE collection_id = …`).
 
 | Alternative | Why not |
 |-------------|---------|
 | `vector(1536)` column | Locks every collection to one model |
 | One table per collection or per dimension | Dynamic DDL in the application, harder migrations and isolation reasoning |
 | Vector column on `chunks` | A rebuild would rewrite the reference layer table; vectors are derived data and are kept apart |
+
+## ADR-013: PostgreSQL full-text as the lexical baseline
+
+**Decision:** the lexical method is PostgreSQL full-text search. Each chunk stores `to_tsvector(<collection language>, text)` (GIN index). A question becomes `plainto_tsquery(language, question)` with `&` rewritten to `|`, and matches are ranked with `ts_rank_cd(..., 1)` (cover density divided by `1 + log(length)`). The language is a per-collection setting (`fulltext_language`).
+
+**Why:** it runs in the same database as the vectors (fair latency, one service), handles stemming and stop words for ~30 languages, and is a well-understood baseline. The OR rewrite matters: with AND, a natural-language question only matches chunks containing *every* content word, so lexical recall would collapse for reasons unrelated to the method.
+
+**Trade-off:** `ts_rank_cd` is not BM25. It has no inverse document frequency, so a common term weighs as much as a rare one. The lab reports it as "full-text", not "BM25".
+
+| Alternative | Why not |
+|-------------|---------|
+| BM25 extension (ParadeDB `pg_search`, VectorChord-bm25) | Not in the official pgvector image; a custom image and a native extension for an MVP |
+| BM25 in Python (`rank_bm25`) | Loads every chunk into memory per query; latency would not be comparable with the vector method running in SQL |
+| Elasticsearch / OpenSearch | A second engine; cross-engine latency distorts the comparison (ADR-005) |
+| One global language | Mixed corpora are common; a Portuguese corpus with English stemming silently loses recall |
+
+## ADR-014: Exact vector search for the benchmark
+
+**Decision:** vector search is an exact scan (`ORDER BY embedding <=> :query`) over the vectors of one chunk set. No HNSW or IVFFlat index is created.
+
+**Why:** the lab measures *retrieval strategies*. An approximate index adds a second, uncontrolled source of error: a low Recall@5 could come from the embeddings or from the ANN index skipping neighbours. Benchmark corpora are small (thousands of chunks), where an exact scan takes milliseconds. HNSW with filters (chunk set, documents) also loses results unless iterative scans are enabled (pgvector ≥ 0.8).
+
+**Trade-off:** latency grows linearly with the chunk set. For a corpus of millions of chunks, add a per-collection HNSW partial expression index (ADR-012) and report its recall separately.
+
+| Alternative | Why not |
+|-------------|---------|
+| HNSW per collection (as originally planned) | Dynamic DDL per collection and dimension; approximate results contaminate the comparison; filtered queries can return fewer than `top_k` |
+| IVFFlat | Needs training data before creation and has the same approximation problem |

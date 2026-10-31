@@ -13,6 +13,7 @@ The domain is the vocabulary of the lab: **spans, documents, chunks, collections
 | `chunks.py` | A retrievable unit derived from a document | `Chunk` |
 | `collections.py` | Isolation boundary, chunk sets to build, embedding binding | `Collection`, `EmbeddingMismatchError` |
 | `embeddings.py` | Which model produced a vector and its length | `EmbeddingSpec` |
+| `retrieval.py` | Search methods, scored hits and rank fusion | `SearchMethod`, `ScoredChunk`, `reciprocal_rank_fusion()` |
 | `chunking/config.py` | How to chunk | `ChunkingConfig`, `ChunkingStrategy` |
 | `chunking/strategies.py` | The chunking algorithms | `chunk_document()` |
 
@@ -59,6 +60,8 @@ A span of a document plus denormalised location metadata (`page_numbers`, `secti
 
 A named set of documents, plus the list of `ChunkingConfig`s every document is chunked with (one **chunk set** per config). It is the **isolation boundary**: queries are always scoped to one collection. Config keys must be unique, and `with_chunking_config()` returns a new collection (entities are immutable).
 
+It also records its **full-text language** (`fulltext_language`, default `english`): the PostgreSQL text search configuration used to stem words and drop stop words. It must be one of `FULLTEXT_LANGUAGES` (the configurations PostgreSQL ships, plus `simple` for no stemming). It is chosen at creation and never changes, because every stored chunk was normalised with it.
+
 ## `EmbeddingSpec` and the embedding binding
 
 **What it is:** `EmbeddingSpec(model, dimensions)`, a validated value object (non-empty model, positive dimension).
@@ -97,3 +100,25 @@ A named set of documents, plus the list of `ChunkingConfig`s every document is c
 | `structure` | Sections and pages are **hard** boundaries (never crossed); oversized units are split recursively; paragraphs are **soft** (small ones are merged) | Chunks align with headings and pages, so citations are precise | Uneven chunk sizes | Structure-aware |
 
 **Why implement chunkers instead of using LangChain's splitters?** LangChain's text splitters return strings. Their optional `start_index` is reconstructed afterwards by searching for each chunk's text in the document, so offsets are *recovered*, not *tracked*. Exact offsets are the foundation of the reference layer, so the algorithms here are written to be offset-exact by construction (about 150 lines, fully tested). LangChain is used where it adds value: the LLM and embedding clients in later phases. See [ADR-004](decisions.md#adr-004-own-chunkers-langchain-at-the-provider-edge).
+
+## Retrieval — `SearchMethod` and Reciprocal Rank Fusion
+
+**What it is:** the three methods the lab compares (`vector`, `fulltext`, `hybrid`), the `ScoredChunk` a method returns (higher score is better) and `reciprocal_rank_fusion()`.
+
+**What fusion does:** hybrid search gets one ranking per method and scores every chunk with
+
+```
+score(chunk) = Σ over rankings  1 / (k + rank of the chunk in that ranking)
+```
+
+A chunk ranked high by **both** methods beats a chunk ranked first by only one. Each fused hit keeps the rank every method gave it (`{"vector": 7, "fulltext": 1}`), which is how the UI explains *why* a chunk was retrieved. Ties keep the order of the first ranking, so results are deterministic.
+
+**Why RRF and not a weighted sum of scores?**
+
+| Option | Problem |
+|--------|---------|
+| `α·cosine + (1-α)·ts_rank` | The scores live on unrelated scales (cosine ∈ [-1, 1], `ts_rank_cd` unbounded and corpus-dependent); `α` would need tuning per corpus and per query |
+| Min-max normalisation, then sum | Sensitive to outliers; one very long chunk shifts everyone's normalised score |
+| **RRF (chosen)** | Uses ranks only, so no calibration; one parameter (`k`, default 60 as in the original paper, `HYBRID_RRF_K`) |
+
+**Why in the domain?** Fusion is pure arithmetic over rankings. Keeping it out of SQL makes it identical for every storage adapter and testable in milliseconds.

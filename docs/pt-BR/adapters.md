@@ -56,6 +56,7 @@ Todo `openai.OpenAIError` (erro HTTP, timeout, conexão recusada) vira `Embeddin
 | `unit_of_work.py` | Uma conexão + uma transação por bloco `with` |
 | `migrations/versions/0001_reference_layer.py` | Migração Alembic que cria o schema da camada de referência |
 | `migrations/versions/0002_embeddings.py` | Habilita `vector`, adiciona as colunas de vínculo da coleção e `chunk_embeddings` |
+| `migrations/versions/0003_retrieval.py` | Adiciona `collections.fulltext_language` e `chunks.search_vector` (preenchido para dados existentes, índice GIN) |
 
 ```mermaid
 erDiagram
@@ -77,7 +78,19 @@ Destaques do schema:
 - `collections.embedding_model` / `embedding_dimensions` guardam o vínculo, com um CHECK garantindo que ambos sejam NULL ou ambos preenchidos.
 - `chunk_embeddings(chunk_id → chunks.id ON DELETE CASCADE, collection_id, config_key, model, dimensions, embedding vector)`. A coluna `embedding` **não tem dimensão fixa**, porque as coleções podem usar modelos diferentes. `CHECK (vector_dims(embedding) = dimensions)` garante a consistência de cada linha. Refazer o chunking de um documento apaga seus chunks, e os vetores vão junto. Veja o [ADR-012](decisions.md#adr-012-uma-tabela-de-vetores-sem-dimensão-fixa).
 - A migração 0002 executa `CREATE EXTENSION IF NOT EXISTS vector`, o que exige um usuário com permissão para criar extensões (o dono do banco no Compose tem).
-- O índice ANN (HNSW) exige dimensão fixa, então será criado por coleção na Fase 3, junto com a recuperação.
+- `collections.fulltext_language` e `chunks.search_vector` (migração 0003) sustentam a busca full-text.
+
+### Busca (`PostgresSearchRepository`)
+
+| Método | SQL | Score |
+|--------|-----|-------|
+| Vetorial | `embedding <=> :query` sobre os `chunk_embeddings` do chunk set, ordenado pela distância | `1 - distância de cosseno` (similaridade de cosseno) |
+| Full-text | `search_vector @@ :tsquery`, ordenado por `ts_rank_cd(search_vector, tsquery, 1)` | Densidade de cobertura, dividida por `1 + log(tamanho)` |
+
+- **Busca vetorial exata, sem índice ANN.** Cada consulta percorre os vetores de um chunk set. Assim os números do benchmark medem a *estratégia* de recuperação, e não o recall perdido por um índice aproximado. Veja o [ADR-014](decisions.md#adr-014-busca-vetorial-exata-para-o-benchmark).
+- **`search_vector`** é `to_tsvector(<idioma da coleção>, text)`, calculado pelo repositório na inserção dos chunks e indexado com **GIN**. A migração 0003 o preenche para os chunks existentes.
+- **Consultas com OU.** O `plainto_tsquery` une as palavras com E, o que rejeita a maioria dos chunks para uma pergunta em linguagem natural. O repositório mantém a normalização dele (stemming, stop words) e troca `&` por `|`, então um chunk é encontrado quando compartilha **qualquer** termo, e chunks com mais termos em comum ficam mais acima. Veja o [ADR-013](decisions.md#adr-013-full-text-do-postgresql-como-base-lexical).
+- Empates são resolvidos pela ordem de leitura (documento, depois índice do chunk), então os resultados são determinísticos.
 
 **Por que SQLAlchemy Core e não o ORM?** As entidades de domínio são dataclasses congeladas. O mapeamento do ORM exigiria classes mutáveis e instrumentadas ou um segundo conjunto de modelos. O Core dá SQL explícito com tabelas tipadas, e as funções de mapeamento são curtas e visíveis. **Por que não SQL em strings?** O Core compõe consultas com segurança (sem concatenação de strings) e serve de base para o Alembic. **Por que PostgreSQL?** O pgvector (fase 2) e a busca full-text nativa (fase 3) permitem recuperação vetorial, lexical e híbrida em **um único** banco, então as comparações de latência são justas.
 
@@ -99,6 +112,7 @@ O mesmo contrato sobre dicionários, com rollback real (cada transação trabalh
 | `GET` | `/collections/{id}/chunk-sets/{key}/chunks?document_id=` | Chunks com spans, páginas e caminhos de títulos |
 | `POST` | `/collections/{id}/chunk-sets/{key}/index?rebuild=false` | Gera os embeddings dos chunks pendentes; retorna total / já indexados / gerados / segundos |
 | `GET` | `/collections/{id}/index` | Vínculo de embeddings e `embedded / total` por chunk set |
+| `POST` | `/collections/{id}/search` | Corpo `{query, chunk_set, method: vector\|fulltext\|hybrid, top_k, document_ids}`; retorna resultados ordenados com spans, score, `ranks` por método e tempos |
 
 A documentação interativa fica em `http://localhost:8000/docs` (OpenAPI).
 
@@ -119,7 +133,8 @@ A documentação interativa fica em `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Ponto de entrada e navegação |
 | `pages/home.py` | Visão geral dos dois pipelines |
 | `pages/ingestion.py` | Coleções (barra lateral), uploads, lista de documentos, **inspetor de chunks**, progresso da indexação e a ação **Index chunk set** (com rebuild opcional) |
-| `highlight.py` | Função pura que desenha os spans dos chunks com destaques alternados; sobreposições ganham uma cor própria |
+| `pages/retrieval.py` | **Comparação de métodos**: uma pergunta, três colunas (vetorial, full-text, híbrida), cada resultado com score, posição por método, localização e termos da pergunta destacados; filtro por documento e `top_k` na barra lateral |
+| `highlight.py` | Funções puras que desenham os spans dos chunks com destaques alternados (sobreposições ganham uma cor própria) e marcam os termos da pergunta como evidência |
 | `api_client.py` | Cliente `httpx` tipado para a API |
 | `theme.py` + `.streamlit/config.toml` | Identidade visual: fundo branco, destaque azul `#2563EB`, fonte Inter, cards e badges |
 

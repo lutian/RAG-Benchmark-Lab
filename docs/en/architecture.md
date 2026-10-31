@@ -85,7 +85,28 @@ sequenceDiagram
 
 Each batch is committed on its own, so a provider failure halfway loses nothing: the next run embeds only what is still pending.
 
-### Question answering (planned, phases 3–5)
+### Retrieval (implemented)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant R as RetrievalService
+    participant E as Embedder
+    participant DB as SearchRepository
+    C->>R: search(collection, chunk set, query, method)
+    R->>DB: check chunk set (+ binding and coverage for vector/hybrid)
+    alt vector or hybrid
+        R->>E: embed_query(query)
+        R->>DB: vector(top candidates)
+    end
+    alt fulltext or hybrid
+        R->>DB: fulltext(top candidates)
+    end
+    R->>R: reciprocal_rank_fusion (hybrid)
+    R-->>C: hits + rank per method + timings
+```
+
+### Question answering (planned, phases 4–5)
 
 `Question → retrieval strategy (vector / full-text / hybrid) → filters → reranking → context → LLM → answer with citations`, or abstention when the evidence is insufficient.
 

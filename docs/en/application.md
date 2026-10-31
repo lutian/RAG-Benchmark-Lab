@@ -10,8 +10,10 @@ The application layer holds the **use cases** (what the system can do) and the *
 |--------|---------|
 | `services/ingestion.py` | `IngestionService`: collections, document ingestion, chunk sets |
 | `services/indexing.py` | `IndexingService`: embed chunk sets, binding, progress |
+| `services/retrieval.py` | `RetrievalService`: vector, full-text and hybrid search with filters and timings |
 | `ports/parsing.py` | `DocumentParser` port and its output `ParsedDocument` |
 | `ports/embeddings.py` | `Embedder` (the model) and `EmbeddingRepository` (the vector store) ports |
+| `ports/search.py` | `SearchRepository`: ranked vector and full-text lookups over one chunk set |
 | `ports/repositories.py` | Repository ports and the `UnitOfWork` transaction boundary |
 | `errors.py` | Expected failures, translated to HTTP codes by the API |
 
@@ -46,6 +48,22 @@ Design points:
 - **Explicit action, not on upload.** Uploading stays fast and works without a provider. Indexing can be repeated per chunk set and timed for the benchmark. See [ADR-011](decisions.md#adr-011-explicit-resumable-indexing).
 - **Bounded loop.** The batch loop runs at most `ceil(pending / batch) + 1` times, so a faulty store can never spin forever.
 
+## `RetrievalService`
+
+| Use case | Behaviour |
+|----------|-----------|
+| `search(id, key, query, method, top_k=10, document_ids=None)` | Ranks the chunks of one chunk set and returns a `SearchResult`: hits (chunk, score, rank, rank per method) and timings (`embed_ms`, `search_ms`, `total_ms`) |
+
+Flow: validate (non-blank query, `1 ≤ top_k ≤ 100`) → check the chunk set exists → for `vector`/`hybrid`, check the embedding binding and coverage → embed the query → search → fuse (hybrid).
+
+Design points:
+
+- **Vector scores are only meaningful against a complete index of the same model.** `vector` and `hybrid` return 409 when the collection is not indexed, is bound to another model than the configured embedder, or has chunks without vectors (`3/4 chunks`). A silently partial index would bias every benchmark number. `fulltext` works right after upload.
+- **Hybrid digs deeper than `top_k`.** Each method returns `RETRIEVAL_CANDIDATES` (default 50) chunks before fusion, because a chunk ranked 12th by both methods can deserve a top-5 fused position.
+- **Timings per stage.** Embedding the query (a network call) and searching (the database) are measured separately, so the benchmark can show where latency comes from. Full-text never calls the embedder (`embed_ms = 0`).
+- **Filters.** `document_ids` restricts every method to those documents (the "Filters" step of the question flow).
+- **Explainable hits.** Every hit carries `ranks`, e.g. `{"vector": 9, "fulltext": 1}` for a chunk that only the lexical method found near the top.
+
 ## Ports
 
 ### `DocumentParser`
@@ -64,6 +82,7 @@ It returns canonical text, structural elements and metadata, or raises `Unsuppor
 | `DocumentRepository` | Add, get **(collection_id, document_id)**, list by collection, find by hash |
 | `ChunkRepository` | Replace one document's chunks in one chunk set; list a chunk set (optionally one document) |
 | `EmbeddingRepository` | Pending chunks of a chunk set, save vectors, count, delete all vectors of a collection |
+| `SearchRepository` | `vector(...)`: exact nearest neighbours by cosine similarity; `fulltext(...)`: chunks sharing at least one normalised term with the query, ranked by coverage. Both scoped by collection and chunk set, with an optional document filter |
 | `UnitOfWork` | Context manager exposing the repositories; `commit()` makes changes visible, leaving the block without committing rolls back |
 
 ### `Embedder`
@@ -74,7 +93,7 @@ def embed_documents(self, texts: Sequence[str]) -> list[list[float]]
 def embed_query(self, text: str) -> list[float]
 ```
 
-Implementations wrap provider failures in `EmbeddingProviderError`. The query method is used from Phase 3 (retrieval).
+Implementations wrap provider failures in `EmbeddingProviderError`. `embed_query` is used by retrieval for the question.
 
 **Isolation is in the signatures.** No read method returns documents or chunks without a `collection_id`. A caller cannot "forget the filter", because there is no unfiltered method to call.
 
@@ -91,7 +110,8 @@ Implementations wrap provider failures in `EmbeddingProviderError`. The query me
 | Error | Meaning | HTTP |
 |-------|---------|------|
 | `NotFoundError` | Entity does not exist **or belongs to another collection** | 404 |
-| `ConflictError` | Duplicate collection name or chunk set; collection bound to another embedding model | 409 |
+| `ConflictError` | Duplicate collection name or chunk set; collection bound to another embedding model; vector/hybrid search on a chunk set that is not fully indexed | 409 |
+| `InvalidRequestError` | Values that cannot be used: blank query, `top_k` out of range, unknown full-text language, blank collection name | 422 |
 | `EmbeddingProviderError` | Embeddings API failed, was unreachable, or returned vectors of the wrong size | 502 |
 | `UploadTooLargeError` | File exceeds `MAX_UPLOAD_MB` | 413 |
 | `UnsupportedDocumentError` | Extension is not `.pdf`, `.md`, `.markdown`, `.txt` | 415 |

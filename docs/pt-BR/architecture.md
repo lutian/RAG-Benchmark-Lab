@@ -85,7 +85,28 @@ sequenceDiagram
 
 Cada lote recebe seu próprio commit, então uma falha do provedor no meio do caminho não perde nada: a próxima execução gera só o que ainda está pendente.
 
-### Perguntas e respostas (planejado, fases 3–5)
+### Recuperação (implementada)
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant R as RetrievalService
+    participant E as Embedder
+    participant DB as SearchRepository
+    C->>R: search(coleção, chunk set, pergunta, método)
+    R->>DB: verifica o chunk set (+ vínculo e cobertura para vector/hybrid)
+    alt vector ou hybrid
+        R->>E: embed_query(pergunta)
+        R->>DB: vector(melhores candidatos)
+    end
+    alt fulltext ou hybrid
+        R->>DB: fulltext(melhores candidatos)
+    end
+    R->>R: reciprocal_rank_fusion (hybrid)
+    R-->>C: resultados + posição por método + tempos
+```
+
+### Perguntas e respostas (planejado, fases 4–5)
 
 `Pergunta → estratégia de recuperação (vetorial / full-text / híbrida) → filtros → reranking → contexto → LLM → resposta com citações`, ou abstenção quando a evidência é insuficiente.
 

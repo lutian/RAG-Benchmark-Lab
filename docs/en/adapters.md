@@ -56,6 +56,7 @@ Every `openai.OpenAIError` (HTTP error, timeout, connection refused) becomes `Em
 | `unit_of_work.py` | One connection + one transaction per `with` block |
 | `migrations/versions/0001_reference_layer.py` | Alembic migration creating the reference-layer schema |
 | `migrations/versions/0002_embeddings.py` | Enables `vector`, adds the collection binding columns and `chunk_embeddings` |
+| `migrations/versions/0003_retrieval.py` | Adds `collections.fulltext_language` and `chunks.search_vector` (backfilled, GIN index) |
 
 ```mermaid
 erDiagram
@@ -77,7 +78,19 @@ Schema highlights:
 - `collections.embedding_model` / `embedding_dimensions` store the binding, with a CHECK that both are NULL or both set.
 - `chunk_embeddings(chunk_id → chunks.id ON DELETE CASCADE, collection_id, config_key, model, dimensions, embedding vector)`. The `embedding` column has **no fixed dimension**, because collections may use different models. `CHECK (vector_dims(embedding) = dimensions)` keeps each row honest. Re-chunking a document deletes its chunks, and their vectors go with them. See [ADR-012](decisions.md#adr-012-one-vector-table-without-a-fixed-dimension).
 - Migration 0002 runs `CREATE EXTENSION IF NOT EXISTS vector`, which needs a role allowed to create extensions (the Compose database owner is).
-- The ANN index (HNSW) needs a fixed dimension, so it is created per collection in Phase 3, together with retrieval.
+- `collections.fulltext_language` and `chunks.search_vector` (migration 0003) support full-text search.
+
+### Search (`PostgresSearchRepository`)
+
+| Method | SQL | Score |
+|--------|-----|-------|
+| Vector | `embedding <=> :query` over `chunk_embeddings` of the chunk set, ordered by distance | `1 - cosine distance` (cosine similarity) |
+| Full-text | `search_vector @@ :tsquery`, ordered by `ts_rank_cd(search_vector, tsquery, 1)` | Cover density, divided by `1 + log(length)` |
+
+- **Exact vector search, no ANN index.** Every query scans the vectors of one chunk set. Benchmark numbers then measure the retrieval *strategy*, not the recall lost by an approximate index. See [ADR-014](decisions.md#adr-014-exact-vector-search-for-the-benchmark).
+- **`search_vector`** is `to_tsvector(<collection language>, text)`, computed by the repository when chunks are inserted and indexed with **GIN**. Migration 0003 backfills it for existing chunks.
+- **OR queries.** `plainto_tsquery` joins words with AND, which rejects most chunks for a natural-language question. The repository keeps its normalisation (stemming, stop words) and rewrites `&` as `|`, so a chunk matches when it shares **any** term, and chunks sharing more terms rank higher. See [ADR-013](decisions.md#adr-013-postgresql-full-text-as-the-lexical-baseline).
+- Ties are broken by reading order (document, then chunk index), so results are deterministic.
 
 **Why SQLAlchemy Core and not the ORM?** Domain entities are frozen dataclasses. ORM mapping would need mutable, instrumented classes or a second set of models. Core gives explicit SQL with typed tables, and the mapping functions are short and visible. **Why not raw SQL strings?** Core composes queries safely (no string concatenation) and generates the Alembic baseline. **Why PostgreSQL?** pgvector (phase 2) and native full-text search (phase 3) let vector, lexical and hybrid retrieval run in **one** database, so latency comparisons are fair.
 
@@ -99,6 +112,7 @@ The same contract backed by dictionaries, with real rollback (each transaction w
 | `GET` | `/collections/{id}/chunk-sets/{key}/chunks?document_id=` | Chunks with spans, pages and heading paths |
 | `POST` | `/collections/{id}/chunk-sets/{key}/index?rebuild=false` | Embed pending chunks; returns total / already indexed / embedded / seconds |
 | `GET` | `/collections/{id}/index` | Embedding binding and `embedded / total` per chunk set |
+| `POST` | `/collections/{id}/search` | Body `{query, chunk_set, method: vector\|fulltext\|hybrid, top_k, document_ids}`; returns ranked hits with spans, score, `ranks` per method and timings |
 
 Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).
 
@@ -119,7 +133,8 @@ Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Entry point and navigation |
 | `pages/home.py` | Overview of both pipelines |
 | `pages/ingestion.py` | Collections (sidebar), uploads, document list, **chunk inspector**, indexing progress and the **Index chunk set** action (with optional rebuild) |
-| `highlight.py` | Pure function rendering chunk spans as alternating highlights; overlaps get their own colour |
+| `pages/retrieval.py` | **Method comparison**: one question, three columns (vector, full-text, hybrid), each hit with score, rank per method, location and highlighted query terms; document filter and `top_k` in the sidebar |
+| `highlight.py` | Pure functions rendering chunk spans as alternating highlights (overlaps get their own colour) and marking query terms as evidence |
 | `api_client.py` | Typed `httpx` client for the API |
 | `theme.py` + `.streamlit/config.toml` | Visual identity: white canvas, blue accent `#2563EB`, Inter font, cards and badges |
 

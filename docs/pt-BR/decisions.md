@@ -10,7 +10,7 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 | [002](#adr-002-camada-de-referência-independente-do-chunking) | Camada de referência independente do chunking (spans de caracteres) | Aceita |
 | [003](#adr-003-tamanho-do-chunk-em-caracteres) | Tamanho do chunk medido em caracteres | Aceita |
 | [004](#adr-004-chunkers-próprios-langchain-na-borda-dos-provedores) | Chunkers próprios; LangChain só na borda dos provedores | Aceita |
-| [005](#adr-005-postgresql-para-tudo) | PostgreSQL + pgvector para documentos, vetores e full-text | Aceita (full-text planejado) |
+| [005](#adr-005-postgresql-para-tudo) | PostgreSQL + pgvector para documentos, vetores e full-text | Aceita |
 | [006](#adr-006-provedores-compatíveis-com-openai-configurados-no-env) | Provedores compatíveis com OpenAI configurados no `.env` | Aceita (embeddings prontos, chat planejado) |
 | [007](#adr-007-streamlit-com-css-customizado) | Streamlit com CSS customizado | Aceita |
 | [008](#adr-008-coleções-como-fronteira-de-isolamento) | Coleções como fronteira de isolamento | Aceita |
@@ -18,6 +18,8 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 | [010](#adr-010-perguntas-golden-sintéticas-com-revisão-humana) | Perguntas golden sintéticas com revisão humana | Planejada |
 | [011](#adr-011-indexação-explícita-e-retomável) | Indexação explícita e retomável, com coleções vinculadas ao modelo | Aceita |
 | [012](#adr-012-uma-tabela-de-vetores-sem-dimensão-fixa) | Uma tabela de vetores sem dimensão fixa | Aceita |
+| [013](#adr-013-full-text-do-postgresql-como-base-lexical) | Full-text do PostgreSQL (consulta com OU, `ts_rank_cd`) como método lexical | Aceita |
+| [014](#adr-014-busca-vetorial-exata-para-o-benchmark) | Busca vetorial exata, sem índice ANN | Aceita |
 
 ---
 
@@ -118,10 +120,38 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 
 **Decisão:** uma única tabela `chunk_embeddings` com uma coluna `vector` sem tipo de dimensão, mais uma coluna `dimensions` protegida por `CHECK (vector_dims(embedding) = dimensions)`.
 
-**Por quê:** as coleções ficam vinculadas a modelos diferentes (768, 1024, 1536… dimensões), e uma coluna tipada `vector(n)` obrigaria um único modelo para o banco inteiro. **Trade-off:** índices HNSW exigem dimensão fixa, então a Fase 3 os cria por coleção, como índices parciais de expressão (`(embedding::vector(n)) … WHERE collection_id = …`).
+**Por quê:** as coleções ficam vinculadas a modelos diferentes (768, 1024, 1536… dimensões), e uma coluna tipada `vector(n)` obrigaria um único modelo para o banco inteiro. **Trade-off:** índices HNSW exigem dimensão fixa. A recuperação não precisa de um (veja o ADR-014); se uma instalação grande precisar, ele pode ser criado por coleção como índice parcial de expressão (`(embedding::vector(n)) … WHERE collection_id = …`).
 
 | Alternativa | Por que não |
 |-------------|-------------|
 | Coluna `vector(1536)` | Prende todas as coleções a um único modelo |
 | Uma tabela por coleção ou por dimensão | DDL dinâmico na aplicação, migrações e isolamento mais difíceis de raciocinar |
 | Coluna de vetor em `chunks` | Uma reconstrução reescreveria a tabela da camada de referência; vetores são dados derivados e ficam separados |
+
+## ADR-013: Full-text do PostgreSQL como base lexical
+
+**Decisão:** o método lexical é a busca full-text do PostgreSQL. Cada chunk guarda `to_tsvector(<idioma da coleção>, text)` (índice GIN). A pergunta vira `plainto_tsquery(idioma, pergunta)` com `&` trocado por `|`, e os resultados são ordenados com `ts_rank_cd(..., 1)` (densidade de cobertura dividida por `1 + log(tamanho)`). O idioma é uma configuração por coleção (`fulltext_language`).
+
+**Por quê:** roda no mesmo banco dos vetores (latência justa, um único serviço), trata stemming e stop words para cerca de 30 idiomas e é uma base bem conhecida. A troca por OU importa: com E, uma pergunta em linguagem natural só encontra chunks que contêm *todas* as palavras de conteúdo, e o recall lexical despencaria por motivos que nada têm a ver com o método.
+
+**Trade-off:** `ts_rank_cd` não é BM25. Não tem frequência inversa de documento, então um termo comum pesa o mesmo que um raro. O laboratório o chama de "full-text", e não de "BM25".
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| Extensão BM25 (ParadeDB `pg_search`, VectorChord-bm25) | Não vem na imagem oficial do pgvector; exigiria uma imagem própria e uma extensão nativa para um MVP |
+| BM25 em Python (`rank_bm25`) | Carrega todos os chunks na memória a cada consulta; a latência não seria comparável com a do método vetorial rodando em SQL |
+| Elasticsearch / OpenSearch | Um segundo motor; a latência entre motores distorce a comparação (ADR-005) |
+| Um único idioma global | Corpora mistos são comuns; um corpus em português com stemming em inglês perde recall em silêncio |
+
+## ADR-014: Busca vetorial exata para o benchmark
+
+**Decisão:** a busca vetorial é uma varredura exata (`ORDER BY embedding <=> :query`) sobre os vetores de um chunk set. Nenhum índice HNSW ou IVFFlat é criado.
+
+**Por quê:** o laboratório mede *estratégias de recuperação*. Um índice aproximado acrescenta uma segunda fonte de erro, sem controle: um Recall@5 baixo poderia vir dos embeddings ou do índice ANN pulando vizinhos. Os corpora de benchmark são pequenos (milhares de chunks), e nesse tamanho uma varredura exata leva milissegundos. HNSW com filtros (chunk set, documentos) também perde resultados, a menos que as varreduras iterativas estejam ativas (pgvector ≥ 0.8).
+
+**Trade-off:** a latência cresce linearmente com o chunk set. Para um corpus de milhões de chunks, crie um índice HNSW parcial de expressão por coleção (ADR-012) e reporte o recall dele separadamente.
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| HNSW por coleção (como planejado originalmente) | DDL dinâmico por coleção e dimensão; resultados aproximados contaminam a comparação; consultas filtradas podem retornar menos que `top_k` |
+| IVFFlat | Precisa de dados de treino antes de ser criado e tem o mesmo problema de aproximação |
