@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from rag_lab.config import Settings
 
@@ -152,3 +153,15 @@ def test_rejects_unknown_reasoning_effort(monkeypatch: pytest.MonkeyPatch) -> No
 
     with pytest.raises(ValueError, match="llm_reasoning_effort"):
         Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+def test_retrieval_settings_have_defaults_and_validate_the_language() -> None:
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.default_fulltext_language == "english"
+    assert settings.retrieval_candidates == 50
+    assert settings.hybrid_rrf_k == 60
+    with pytest.raises(ValidationError, match="full-text language"):
+        Settings(_env_file=None, default_fulltext_language="klingon")  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, hybrid_rrf_k=0)  # type: ignore[call-arg]

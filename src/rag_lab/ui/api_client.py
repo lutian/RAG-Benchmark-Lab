@@ -33,11 +33,16 @@ class ApiClient:
         return result
 
     def create_collection(
-        self, name: str, chunking_configs: list[dict[str, Any]] | None = None
+        self,
+        name: str,
+        chunking_configs: list[dict[str, Any]] | None = None,
+        fulltext_language: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {"name": name}
         if chunking_configs is not None:
             body["chunking_configs"] = chunking_configs
+        if fulltext_language is not None:
+            body["fulltext_language"] = fulltext_language
         result: dict[str, Any] = self._request("POST", "/collections", json=body)
         return result
 
@@ -88,6 +93,27 @@ class ApiClient:
 
     def index_status(self, collection_id: str) -> dict[str, Any]:
         result: dict[str, Any] = self._request("GET", f"/collections/{collection_id}/index")
+        return result
+
+    def search(
+        self,
+        collection_id: str,
+        query: str,
+        chunk_set: str,
+        method: str,
+        top_k: int = 10,
+        document_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "query": query,
+            "chunk_set": chunk_set,
+            "method": method,
+            "top_k": top_k,
+            "document_ids": document_ids,
+        }
+        result: dict[str, Any] = self._request(
+            "POST", f"/collections/{collection_id}/search", json=body
+        )
         return result
 
 

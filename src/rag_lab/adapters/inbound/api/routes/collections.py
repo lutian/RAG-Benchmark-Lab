@@ -39,7 +39,10 @@ def create_collection(body: CollectionIn, container: ContainerDep) -> Collection
         if body.chunking_configs is not None
         else container.default_chunking_configs
     )
-    return CollectionOut.from_domain(_service(container).create_collection(body.name, configs))
+    language = body.fulltext_language or container.settings.default_fulltext_language
+    return CollectionOut.from_domain(
+        _service(container).create_collection(body.name, configs, language)
+    )
 
 
 @router.get("")

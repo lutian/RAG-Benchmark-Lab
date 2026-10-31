@@ -72,6 +72,8 @@ mark[class^="rl-"] { padding: 0; border-radius: 2px; color: inherit; }
   background: #FFFFFF;
 }
 
+.rl-snippet { font-size: 0.85rem; line-height: 1.55; margin-top: 8px; white-space: pre-wrap; }
+
 .rl-brand { font-weight: 700; font-size: 1.4rem; letter-spacing: -0.02em; }
 .rl-brand span { color: var(--rl-accent); }
 </style>

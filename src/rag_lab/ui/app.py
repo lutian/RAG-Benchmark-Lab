@@ -17,6 +17,7 @@ navigation = st.navigation(
     [
         st.Page(PAGES_DIR / "home.py", title="Overview", default=True),
         st.Page(PAGES_DIR / "ingestion.py", title="Ingestion"),
+        st.Page(PAGES_DIR / "retrieval.py", title="Retrieval"),
     ]
 )
 navigation.run()

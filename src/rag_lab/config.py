@@ -8,8 +8,10 @@ code change. Real environment variables take precedence over the file.
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from rag_lab.domain.collections import FULLTEXT_LANGUAGES
 
 
 class Settings(BaseSettings):
@@ -54,9 +56,25 @@ class Settings(BaseSettings):
     max_upload_mb: int = 25
     default_chunk_size: int = 800
     default_chunk_overlap: int = 120
+    # PostgreSQL text search configuration for new collections (stemming, stop words).
+    default_fulltext_language: str = "english"
+
+    # Retrieval
+    retrieval_candidates: int = Field(default=50, gt=0)  # per method, before hybrid fusion
+    hybrid_rrf_k: int = Field(default=60, gt=0)  # Reciprocal Rank Fusion constant
 
     # UI -> API
     api_url: str = "http://localhost:8000"
+
+    @field_validator("default_fulltext_language")
+    @classmethod
+    def _known_fulltext_language(cls, value: str) -> str:
+        if value not in FULLTEXT_LANGUAGES:
+            raise ValueError(
+                f"unknown full-text language {value!r}; use one of "
+                f"{', '.join(sorted(FULLTEXT_LANGUAGES))}"
+            )
+        return value
 
     @model_validator(mode="after")
     def _temperature_requires_no_reasoning(self) -> Self:

@@ -15,6 +15,8 @@ from rag_lab.ui.highlight import as_preview_block, render_chunks
 from rag_lab.ui.theme import apply_theme
 
 STRATEGIES = ["fixed", "recursive", "structure"]
+# Common PostgreSQL text search configurations; "simple" = no stemming (mixed languages).
+LANGUAGES = ["english", "portuguese", "spanish", "french", "german", "italian", "simple"]
 
 apply_theme()
 client = api_client.get_client()
@@ -43,13 +45,18 @@ with st.sidebar:
         strategies = st.multiselect("Chunking strategies", STRATEGIES, default=STRATEGIES)
         size = st.number_input("Chunk size (characters)", 50, 20_000, 800, step=50)
         overlap = st.number_input("Overlap (characters)", 0, 5_000, 120, step=10)
+        language = st.selectbox(
+            "Full-text language",
+            LANGUAGES,
+            help="Stemming and stop words for full-text search. Fixed after creation.",
+        )
         if st.form_submit_button("Create", type="primary"):
             configs = [
                 {"strategy": s, "chunk_size": int(size), "chunk_overlap": int(overlap)}
                 for s in strategies
             ]
             try:
-                client.create_collection(name, configs)
+                client.create_collection(name, configs, language)
                 st.rerun()
             except api_client.ApiError as error:
                 st.error(str(error))

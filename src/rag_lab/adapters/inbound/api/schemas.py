@@ -8,11 +8,13 @@ from pydantic import BaseModel, Field, model_validator
 
 from rag_lab.application.services.indexing import IndexingReport, IndexStatus
 from rag_lab.application.services.ingestion import IngestionResult
+from rag_lab.application.services.retrieval import MAX_TOP_K, SearchResult
 from rag_lab.domain.chunking import ChunkingConfig, ChunkingStrategy
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
 from rag_lab.domain.embeddings import EmbeddingSpec
+from rag_lab.domain.retrieval import SearchMethod
 
 
 class ChunkingConfigIn(BaseModel):
@@ -61,6 +63,11 @@ class CollectionIn(BaseModel):
         default=None,
         description="Chunk sets to build for every document. Defaults to one per strategy.",
     )
+    fulltext_language: str | None = Field(
+        default=None,
+        description="PostgreSQL text search configuration (e.g. english, portuguese, simple). "
+        "Defaults to DEFAULT_FULLTEXT_LANGUAGE.",
+    )
 
 
 class CollectionOut(BaseModel):
@@ -68,6 +75,7 @@ class CollectionOut(BaseModel):
     name: str
     created_at: datetime
     chunking_configs: list[ChunkingConfigOut]
+    fulltext_language: str
     embedding: EmbeddingOut | None = Field(
         description="Embedding model the collection is bound to (null until first indexed)."
     )
@@ -82,6 +90,7 @@ class CollectionOut(BaseModel):
                 ChunkingConfigOut.from_domain(c) for c in collection.chunking_configs
             ],
             embedding=EmbeddingOut.from_domain(collection.embedding),
+            fulltext_language=collection.fulltext_language,
         )
 
 
@@ -217,4 +226,58 @@ class IndexStatusOut(BaseModel):
                 ChunkSetStatusOut(config_key=s.config_key, total=s.total, embedded=s.embedded)
                 for s in status.chunk_sets
             ],
+        )
+
+
+class SearchIn(BaseModel):
+    query: str = Field(min_length=1, max_length=2_000)
+    chunk_set: str = Field(description="Chunking config key, e.g. recursive-800-120.")
+    method: SearchMethod = SearchMethod.HYBRID
+    top_k: int = Field(default=10, ge=1, le=MAX_TOP_K)
+    document_ids: list[UUID] | None = Field(
+        default=None, description="Only search these documents (null = all)."
+    )
+
+
+class SearchHitOut(ChunkOut):
+    rank: int
+    score: float = Field(
+        description="vector: cosine similarity; fulltext: ts_rank_cd; hybrid: RRF score."
+    )
+    ranks: dict[str, int] = Field(description="1-based rank per underlying method.")
+
+
+class SearchTimingsOut(BaseModel):
+    embed_ms: float
+    search_ms: float
+    total_ms: float
+
+
+class SearchOut(BaseModel):
+    query: str
+    chunk_set: str
+    method: SearchMethod
+    hits: list[SearchHitOut]
+    timings: SearchTimingsOut
+
+    @classmethod
+    def from_result(cls, result: SearchResult) -> "SearchOut":
+        return cls(
+            query=result.query,
+            chunk_set=result.config_key,
+            method=result.method,
+            hits=[
+                SearchHitOut(
+                    **ChunkOut.from_domain(hit.chunk).model_dump(),
+                    rank=hit.rank,
+                    score=hit.score,
+                    ranks=dict(hit.ranks),
+                )
+                for hit in result.hits
+            ],
+            timings=SearchTimingsOut(
+                embed_ms=result.timings.embed_ms,
+                search_ms=result.timings.search_ms,
+                total_ms=result.timings.total_ms,
+            ),
         )

@@ -16,6 +16,7 @@ from rag_lab.application.ports.embeddings import Embedder
 from rag_lab.application.ports.repositories import UnitOfWork
 from rag_lab.application.services.indexing import IndexingService
 from rag_lab.application.services.ingestion import IngestionService
+from rag_lab.application.services.retrieval import RetrievalService
 from rag_lab.config import Settings
 from rag_lab.domain.chunking import ChunkingConfig, ChunkingStrategy
 
@@ -25,6 +26,7 @@ class Container:
     settings: Settings
     ingestion: IngestionService
     indexing: IndexingService
+    retrieval: RetrievalService
     default_chunking_configs: tuple[ChunkingConfig, ...]
 
 
@@ -71,4 +73,10 @@ def _assemble(
     indexing = IndexingService(
         uow_factory=uow_factory, embedder=embedder, batch_size=settings.embedding_batch_size
     )
-    return Container(settings, ingestion, indexing, default_chunking_configs(settings))
+    retrieval = RetrievalService(
+        uow_factory=uow_factory,
+        embedder=embedder,
+        candidates=settings.retrieval_candidates,
+        rrf_k=settings.hybrid_rrf_k,
+    )
+    return Container(settings, ingestion, indexing, retrieval, default_chunking_configs(settings))
