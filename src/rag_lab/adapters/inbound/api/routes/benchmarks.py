@@ -10,7 +10,7 @@ from rag_lab.adapters.inbound.api.routes.collections import ContainerDep
 from rag_lab.adapters.inbound.api.schemas import BenchmarkIn, BenchmarkRunOut
 from rag_lab.application.errors import InvalidRequestError
 from rag_lab.application.reporting import markdown_report
-from rag_lab.application.run_codec import run_to_payload
+from rag_lab.application.run_codec import run_document
 
 router = APIRouter(prefix="/collections/{collection_id}/benchmarks", tags=["benchmarks"])
 
@@ -42,8 +42,7 @@ def list_runs(collection_id: UUID, container: ContainerDep) -> list[BenchmarkRun
 @router.get("/{run_id}")
 def get_run(collection_id: UUID, run_id: UUID, container: ContainerDep) -> dict[str, Any]:
     """The full run, per-question results included, in the versioned JSON format."""
-    run = container.benchmark.get(collection_id, run_id)
-    return {"id": str(run.id), "created_at": run.created_at.isoformat(), **run_to_payload(run)}
+    return run_document(container.benchmark.get(collection_id, run_id))
 
 
 @router.get("/{run_id}/report", response_class=PlainTextResponse)

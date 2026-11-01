@@ -65,3 +65,12 @@ def test_missed_questions_lists_questions_no_strategy_found() -> None:
     missed = missed_questions(replace(run, results=only_q2_vector), {str(Q2): "Where?"})
 
     assert missed == ["Where?"]
+
+
+def test_mrr_mark_only_applies_at_cut_off_10() -> None:
+    from dataclasses import replace
+
+    run = make_run()
+    report = markdown_report(replace(run, config=replace(run.config, mrr_cutoff=3)), "H")
+
+    assert "| 0.500 |" in report and "MRR@3" in report

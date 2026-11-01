@@ -93,7 +93,7 @@ Design points:
 | `generate(id, count, seed)` | Cuts every document into ~400-character passages with the recursive chunker (independent of the collection's chunk sets), drops passages under 100 characters or already used as evidence, samples them with `random.Random(seed)` round-robin across documents, and asks the LLM for one question per passage (`SKIP` = no factual content). Each question is a **draft**, committed as soon as it exists |
 | `add_manual(id, text, document_id, excerpt)` | Locates the pasted excerpt in the canonical text, ignoring whitespace differences (PDF line breaks); 422 when it is not there |
 | `questions` / `views` / `update` / `delete` | List (optionally by status), list with excerpts and filenames for review, edit text or status, delete |
-| `export(id)` / `import_(id, payload)` | Portable JSON whose evidence carries the document **content hash**, span and excerpt; import maps hashes to the target collection's documents and skips questions whose files are missing |
+| `export(id)` / `import_(id, payload)` | Portable JSON whose evidence carries the document **content hash**, span and excerpt; import maps hashes to the target collection's documents and skips questions whose files are missing or whose excerpt is found neither at the exported offsets nor elsewhere in the document (stale offsets are never kept); a malformed entry rejects the payload with 422 |
 
 **Why seeded passages from the reference layer?** The same seed and documents give the same passages, so a dataset can be regenerated; using the reference text (not a chunk set) keeps the labels independent of the chunking under test.
 

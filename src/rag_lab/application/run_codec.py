@@ -80,6 +80,11 @@ def run_to_payload(run: BenchmarkRun) -> dict[str, Any]:
     }
 
 
+def run_document(run: BenchmarkRun) -> dict[str, Any]:
+    """The full run as served by the API and written by the CLI: identity + payload."""
+    return {"id": str(run.id), "created_at": run.created_at.isoformat(), **run_to_payload(run)}
+
+
 def run_from_payload(
     run_id: UUID, collection_id: UUID, created_at: Any, payload: dict[str, Any]
 ) -> BenchmarkRun:

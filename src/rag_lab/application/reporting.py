@@ -9,6 +9,7 @@ the retrieval-vs-generation diagnosis of bad answers.
 from collections.abc import Mapping, Sequence
 
 from rag_lab.domain.evaluation import (
+    BenchmarkConfig,
     BenchmarkRun,
     StrategySummary,
     diagnose_failures,
@@ -39,6 +40,11 @@ def _mark(value: float | None, target: float) -> str:
     return f"{value:.1%} {'✅' if value >= target else '❌'}"
 
 
+def headline_k(config: BenchmarkConfig) -> int:
+    """The Recall@k used to rank strategies: 5 (the project target) when measured."""
+    return 5 if 5 in config.ks else max(config.ks)
+
+
 def best_strategy(summaries: Sequence[StrategySummary], k: int = 5) -> StrategySummary:
     """Highest Recall@k, then MRR, then the lowest median latency."""
     return max(summaries, key=lambda s: (s.recall.get(k, 0.0), s.mrr, -s.latency_p50_ms))
@@ -46,7 +52,7 @@ def best_strategy(summaries: Sequence[StrategySummary], k: int = 5) -> StrategyS
 
 def markdown_report(run: BenchmarkRun, collection_name: str) -> str:
     config = run.config
-    k = 5 if 5 in config.ks else max(config.ks)
+    k = headline_k(config)
     best = best_strategy(run.summaries, k)
     lines = [
         f"# Benchmark report — {collection_name}",
@@ -82,7 +88,9 @@ def markdown_report(run: BenchmarkRun, collection_name: str) -> str:
             _mark(s.recall[x], TARGET_RECALL_AT_5) if x == 5 else _pct(s.recall[x])
             for x in config.ks
         ]
-        mrr = f"{s.mrr:.3f} {'✅' if s.mrr >= TARGET_MRR_AT_10 else '❌'}"
+        # The MRR target is defined at cut-off 10; other cut-offs get no pass/fail mark.
+        mark = ("✅" if s.mrr >= TARGET_MRR_AT_10 else "❌") if config.mrr_cutoff == 10 else ""
+        mrr = f"{s.mrr:.3f} {mark}".rstrip()
         lines.append(
             f"| `{s.chunk_set}` | `{s.method}` | {' | '.join(recall_cells)} | {mrr} | "
             f"{s.latency_p50_ms:.1f} | {s.latency_p95_ms:.1f} | {s.cpu_ms_mean:.1f} |"

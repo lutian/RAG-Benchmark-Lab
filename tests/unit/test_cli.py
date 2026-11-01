@@ -74,3 +74,12 @@ def test_errors_are_reported_with_exit_code_1(
     assert main(["benchmark", "--collection", "missing"], container) == 1
     assert main(["benchmark", "--collection", "handbook", "--judge"], container) == 1
     assert "error:" in capsys.readouterr().err
+
+
+def test_best_strategy_uses_the_requested_k(
+    container: Container, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["benchmark", "--collection", "handbook", "--method", "fulltext", "--k", "1",
+          "--k", "3", "--out", str(tmp_path)], container)  # fmt: skip
+
+    assert "(Recall@3 100.0%" in capsys.readouterr().out

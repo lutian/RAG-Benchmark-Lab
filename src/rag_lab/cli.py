@@ -17,8 +17,8 @@ from pathlib import Path
 from uuid import UUID
 
 from rag_lab.application.errors import RagLabError
-from rag_lab.application.reporting import best_strategy, markdown_report
-from rag_lab.application.run_codec import run_to_payload
+from rag_lab.application.reporting import best_strategy, headline_k, markdown_report
+from rag_lab.application.run_codec import run_document
 from rag_lab.bootstrap import Container, build_container
 from rag_lab.config import get_settings
 from rag_lab.domain.collections import Collection
@@ -66,8 +66,7 @@ def _write(run: BenchmarkRun, collection: Collection, out: Path) -> tuple[Path, 
     stem = f"benchmark-{run.created_at:%Y%m%d-%H%M%S}-{str(run.id)[:8]}"
     markdown, data = out / f"{stem}.md", out / f"{stem}.json"
     markdown.write_text(markdown_report(run, collection.name), encoding="utf-8")
-    payload = {"id": str(run.id), "created_at": run.created_at.isoformat(), **run_to_payload(run)}
-    data.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    data.write_text(json.dumps(run_document(run), indent=2, ensure_ascii=False), encoding="utf-8")
     return markdown, data
 
 
@@ -91,9 +90,10 @@ def _benchmark(args: argparse.Namespace, container: Container) -> int:
     run = container.benchmark.run(collection.id, config, progress)
     print(file=sys.stderr)
     markdown, data = _write(run, collection, args.out)
-    best = best_strategy(run.summaries)
+    k = headline_k(run.config)
+    best = best_strategy(run.summaries, k)
     print(f"run {run.id}: best {best.chunk_set} + {best.method} "
-          f"(Recall@5 {best.recall.get(5, 0.0):.1%}, MRR {best.mrr:.3f})")  # fmt: skip
+          f"(Recall@{k} {best.recall.get(k, 0.0):.1%}, MRR {best.mrr:.3f})")  # fmt: skip
     print(f"report: {markdown}\ndata:   {data}")
     return 0
 

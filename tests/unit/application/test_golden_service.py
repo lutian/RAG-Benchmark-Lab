@@ -158,3 +158,23 @@ def test_import_skips_questions_whose_documents_are_missing() -> None:
     assert (report.imported, report.skipped) == (0, 1)
     with pytest.raises(InvalidRequestError, match="format"):
         lab.service.import_(lab.collection.id, {"questions": []})
+
+
+def test_import_rejects_malformed_entries_and_never_keeps_stale_offsets() -> None:
+    lab = Lab()
+
+    def payload(**evidence: object) -> dict[str, object]:
+        entry = {"content_hash": lab.policy.content_hash, "filename": "policy.txt",
+                 "start": 0, "end": 7, "excerpt": "Refunds", **evidence}  # fmt: skip
+        return {"format_version": 1, "questions": [{"text": "Q?", "evidence": [entry]}]}
+
+    moved = lab.service.import_(lab.collection.id, payload(start=500, end=507))
+    stale = lab.service.import_(lab.collection.id, payload(excerpt="not in the text"))
+
+    [question] = lab.service.questions(lab.collection.id)
+    assert (moved.imported, stale.imported, stale.skipped) == (1, 0, 1)
+    assert question.evidence[0].span.start == 0  # found again by its excerpt
+    with pytest.raises(InvalidRequestError, match="#1"):
+        lab.service.import_(lab.collection.id, {"format_version": 1, "questions": [{"text": "Q?"}]})
+    with pytest.raises(InvalidRequestError, match="#1"):
+        lab.service.import_(lab.collection.id, payload(start="x"))

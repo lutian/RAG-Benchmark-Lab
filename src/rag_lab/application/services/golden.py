@@ -35,6 +35,8 @@ from rag_lab.domain.evaluation import (
 from rag_lab.domain.spans import Span
 
 EXPORT_FORMAT = 1
+MAX_IMPORT_QUESTIONS = 5_000
+MAX_EXCERPT_CHARS = 20_000  # same limit as a manual excerpt; bounds locate_excerpt
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,9 +86,7 @@ class GoldenDatasetService:
             reply = self._chat.complete(question_messages(text)).text.strip().strip('"')
             if not reply or reply.upper().startswith(SKIP):
                 continue
-            question = GoldenQuestion.create(
-                collection_id, reply, (evidence,), QuestionOrigin.SYNTHETIC
-            )
+            question = self._new(collection_id, reply, (evidence,), QuestionOrigin.SYNTHETIC)
             with self._uow_factory() as uow:
                 uow.golden.add(question)
                 uow.commit()
@@ -238,39 +238,65 @@ class GoldenDatasetService:
         }
 
     def import_(self, collection_id: UUID, payload: Mapping[str, Any]) -> ImportReport:
+        """Import an exported dataset; any malformed entry rejects the whole payload (422)."""
         if payload.get("format_version") != EXPORT_FORMAT:
             raise InvalidRequestError(
                 f"unsupported golden dataset format (expected {EXPORT_FORMAT})"
+            )
+        items = payload.get("questions", [])
+        if not isinstance(items, list) or len(items) > MAX_IMPORT_QUESTIONS:
+            raise InvalidRequestError(
+                f"'questions' must be a list of at most {MAX_IMPORT_QUESTIONS} entries"
             )
         imported = skipped = 0
         with self._uow_factory() as uow:
             self._require_collection(uow, collection_id)
             by_hash = {d.content_hash: d for d in uow.documents.list(collection_id)}
-            for item in payload.get("questions", []):
-                evidence = []
-                for e in item["evidence"]:
-                    document = by_hash.get(e["content_hash"])
-                    if document is None:
-                        break
-                    span = Span(e["start"], e["end"])
-                    if document.text[span.start : span.end] != e["excerpt"]:
-                        # Same file, different parsing: fall back to finding the text.
-                        span = locate_excerpt(document.text, e["excerpt"]) or span
-                    evidence.append(Evidence(document.id, span))
-                else:
-                    question = self._new(
-                        collection_id,
-                        item["text"],
-                        tuple(evidence),
-                        QuestionOrigin(item.get("origin", "manual")),
-                    )
-                    status = QuestionStatus(item.get("status", "draft"))
-                    uow.golden.add(question.with_status(status))
-                    imported += 1
+            for position, item in enumerate(items, start=1):
+                try:
+                    question = self._imported_question(collection_id, item, by_hash)
+                except (KeyError, TypeError, ValueError) as error:
+                    raise InvalidRequestError(
+                        f"question #{position} is malformed: {error}"
+                    ) from error
+                if question is None:
+                    skipped += 1
                     continue
-                skipped += 1
+                uow.golden.add(question)
+                imported += 1
             uow.commit()
         return ImportReport(imported, skipped)
+
+    def _imported_question(
+        self, collection_id: UUID, item: Mapping[str, Any], by_hash: Mapping[str, Document]
+    ) -> GoldenQuestion | None:
+        """The question with evidence resolved in this collection, or None to skip it.
+
+        Skipped: a document is missing, or the excerpt is found neither at the exported
+        offsets nor anywhere else in the document (stale offsets are never kept).
+        """
+        evidence = []
+        for e in item["evidence"]:
+            document = by_hash.get(e["content_hash"])
+            excerpt = str(e["excerpt"])
+            if document is None or len(excerpt) > MAX_EXCERPT_CHARS:
+                return None
+            start, end = int(e["start"]), int(e["end"])
+            if 0 <= start < end <= len(document.text) and document.text[start:end] == excerpt:
+                span: Span | None = Span(start, end)
+            else:
+                # Same file, different parsing: find the text instead.
+                span = locate_excerpt(document.text, excerpt)
+            if span is None:
+                return None
+            evidence.append(Evidence(document.id, span))
+        question = self._new(
+            collection_id,
+            str(item["text"]),
+            tuple(evidence),
+            QuestionOrigin(item.get("origin", "manual")),
+        )
+        return question.with_status(QuestionStatus(item.get("status", "draft")))
 
     # --- helpers ------------------------------------------------------------------
     @staticmethod

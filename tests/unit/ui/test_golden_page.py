@@ -76,3 +76,12 @@ def test_approve_button_updates_the_status(fake: FakeClient) -> None:
     next(b for b in app.button if b.key == "approve-q1").click().run()
 
     assert ("q1", None, "approved") in fake.updates
+
+
+def test_edits_are_sent_only_when_saved(fake: FakeClient) -> None:
+    app = AppTest.from_file(PAGE).run()
+    app.text_input(key="text-q1").input("Edited?").run()
+
+    assert fake.updates == []
+    next(b for b in app.button if b.key == "save-q1").click().run()
+    assert ("q1", "Edited?", None) in fake.updates

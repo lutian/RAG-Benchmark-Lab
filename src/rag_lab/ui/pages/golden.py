@@ -11,10 +11,10 @@ from typing import Any
 import httpx
 import streamlit as st
 
+from rag_lab.application.reporting import TARGET_QUESTIONS
 from rag_lab.ui import api_client
 from rag_lab.ui.theme import apply_theme
 
-TARGET_QUESTIONS = 50  # project goal: 50 evaluation questions
 STATUS_BADGE = {"draft": "neutral", "approved": "", "rejected": "warn"}
 
 apply_theme()
@@ -102,11 +102,13 @@ for question in shown:
         f'<span class="rl-badge neutral">{question["origin"]}</span></div>{evidence}</div>',
         unsafe_allow_html=True,
     )
-    edit, approve, reject, delete = st.columns([6, 1, 1, 1])
+    edit, save, approve, reject, delete = st.columns([5, 1, 1, 1, 1])
     new_text = edit.text_input(
         "Edit", question["text"], key=f"text-{qid}", label_visibility="collapsed"
     )
-    if new_text != question["text"]:
+    # Explicit save: no request on every rerun, and a blank edit is never sent.
+    unchanged = not new_text.strip() or new_text == question["text"]
+    if save.button("Save", key=f"save-{qid}", disabled=unchanged):
         _act(client.golden_update, collection_id, qid, new_text, None)
     if approve.button("Approve", key=f"approve-{qid}", disabled=question["status"] == "approved"):
         _act(client.golden_update, collection_id, qid, None, "approved")
@@ -118,12 +120,19 @@ for question in shown:
 st.divider()
 export_column, import_column = st.columns(2, gap="large")
 with export_column:
-    st.download_button(
-        "Export dataset (JSON)",
-        data=json.dumps(client.golden_export(collection_id), indent=2, ensure_ascii=False),
-        file_name=f"golden-{collection['name']}.json",
-        mime="application/json",
-    )
+    # Built on demand, not on every rerun of the review page.
+    if st.button("Prepare export (JSON)"):
+        try:
+            exported = json.dumps(client.golden_export(collection_id), indent=2, ensure_ascii=False)
+        except (api_client.ApiError, httpx.HTTPError) as error:
+            st.error(str(error))
+        else:
+            st.download_button(
+                "Download dataset",
+                data=exported,
+                file_name=f"golden-{collection['name']}.json",
+                mime="application/json",
+            )
 with import_column:
     upload = st.file_uploader("Import dataset (JSON)", type=["json"])
     if upload is not None and st.button("Import"):
