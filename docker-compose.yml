@@ -1,0 +1,70 @@
+name: rag-benchmark-lab
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-rag_lab}
+    # Published on loopback only, for running the API/tests from the host.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      args:
+        INSTALL_LOCAL_RERANKER: ${INSTALL_LOCAL_RERANKER:-true}
+    env_file: .env
+    # Apply database migrations, then serve the API.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn rag_lab.adapters.inbound.api.app:create_app --factory --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      # The cross-encoder is downloaded on the first reranked search; keep it.
+      - models:/app/data/hf
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ui:
+    build:
+      context: .
+      args:
+        INSTALL_LOCAL_RERANKER: ${INSTALL_LOCAL_RERANKER:-true}
+    env_file: .env
+    command: streamlit run src/rag_lab/ui/app.py --server.address=0.0.0.0 --server.port=8501
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Optional local OpenAI-compatible provider: `docker compose --profile ollama up`
+  ollama:
+    image: ollama/ollama:0.12.6
+    profiles: ["ollama"]
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  models:
+  pgdata:
+  ollama:

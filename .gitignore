@@ -17,7 +17,7 @@ build/
 
 # Runtime data
 data/uploads/
-reports/output/
+reports/
 
 # Editors / OS
 .idea/

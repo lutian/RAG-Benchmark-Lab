@@ -1,0 +1,734 @@
+{
+  "format_version": 1,
+  "collection": "sample-handbook",
+  "questions": [
+    {
+      "text": "How many days do I have to return an item?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 334,
+          "end": 388,
+          "excerpt": "Most items can be returned within 45 days of delivery."
+        }
+      ]
+    },
+    {
+      "text": "Do top-tier loyalty members get more time to send things back?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 389,
+          "end": 483,
+          "excerpt": "Members of the Trailmark loyalty program at the Summit tier get an extended window of 90 days."
+        }
+      ]
+    },
+    {
+      "text": "Can I return something with a red Final Sale tag?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 484,
+          "end": 594,
+          "excerpt": "Items bought during the winter clearance event, marked with a red \"Final Sale\" tag, cannot be returned at all."
+        }
+      ]
+    },
+    {
+      "text": "Can I bring back hiking shoes I already wore outside?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 596,
+          "end": 710,
+          "excerpt": "Footwear that has been worn outdoors can still be returned if it shows no more wear than a short walk would cause."
+        }
+      ]
+    },
+    {
+      "text": "What has to come back with a tent I am returning?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 888,
+          "end": 968,
+          "excerpt": "Tents must be returned with every pole, stake and guy line that came in the box."
+        }
+      ]
+    },
+    {
+      "text": "Why will the shop refuse a camping stove that still has gas in it?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 1012,
+          "end": 1096,
+          "excerpt": "we cannot accept any item that still contains gas or liquid fuel, for safety reasons"
+        }
+      ]
+    },
+    {
+      "text": "What does an RMA number look like?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 1283,
+          "end": 1379,
+          "excerpt": "the number always begins with the letters RMA followed by eight digits, for example RMA-20481937"
+        }
+      ]
+    },
+    {
+      "text": "What happens to a parcel sent back without the authorization number?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 1381,
+          "end": 1478,
+          "excerpt": "Parcels that arrive without this number are refused by the warehouse and sent back to the sender."
+        }
+      ]
+    },
+    {
+      "text": "How long until a card refund shows up on my statement?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 1687,
+          "end": 1792,
+          "excerpt": "Card refunds appear on the statement within 5 to 7 business days after the warehouse inspects the parcel."
+        }
+      ]
+    },
+    {
+      "text": "I paid with a gift card. How am I refunded?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 1793,
+          "end": 1874,
+          "excerpt": "Gift card purchases are refunded as a new digital gift card, issued the same day."
+        }
+      ]
+    },
+    {
+      "text": "Will you give me back the delivery cost if the product arrived broken?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 1876,
+          "end": 1983,
+          "excerpt": "The original shipping fee is not refunded, except when the product was defective or we sent the wrong item."
+        }
+      ]
+    },
+    {
+      "text": "How long is the replacement size held during an exchange?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "18302c228d0f98f09e489899091faeb531ca9ec55a5312890b6f795a12468741",
+          "filename": "returns-and-refunds.md",
+          "start": 2143,
+          "end": 2225,
+          "excerpt": "We reserve the replacement for 10 days while the original item travels back to us."
+        }
+      ]
+    },
+    {
+      "text": "How much does standard delivery cost?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 148,
+          "end": 225,
+          "excerpt": "Standard delivery takes three to five business days and costs 6.90 per order."
+        }
+      ]
+    },
+    {
+      "text": "From what order value is shipping free?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 226,
+          "end": 280,
+          "excerpt": "Orders above 120 ship for free with standard delivery."
+        }
+      ]
+    },
+    {
+      "text": "What is the cut-off time to get my parcel tomorrow?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 282,
+          "end": 373,
+          "excerpt": "Express delivery arrives on the next business day for orders placed before 13:00 local time"
+        }
+      ]
+    },
+    {
+      "text": "How long does a shop keep an order I chose to collect myself?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 584,
+          "end": 633,
+          "excerpt": "the shop keeps it for 7 days before cancelling it"
+        }
+      ]
+    },
+    {
+      "text": "Do deliveries to the islands take longer?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 730,
+          "end": 767,
+          "excerpt": "island deliveries take two extra days"
+        }
+      ]
+    },
+    {
+      "text": "Who pays import taxes on orders sent abroad?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 832,
+          "end": 934,
+          "excerpt": "Duties and import taxes on international orders are paid by the customer when the parcel is delivered."
+        }
+      ]
+    },
+    {
+      "text": "Can gas canisters be sent by plane?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 936,
+          "end": 979,
+          "excerpt": "We do not ship stove fuel canisters by air."
+        }
+      ]
+    },
+    {
+      "text": "How is a kayak delivered and how much does it cost?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 1237,
+          "end": 1302,
+          "excerpt": "Freight delivery takes 7 to 12 business days and costs a flat 39."
+        }
+      ]
+    },
+    {
+      "text": "My parcel says delivered but I can't find it. What should I do?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 1473,
+          "end": 1552,
+          "excerpt": "customers should wait 24 hours, check with neighbours, and then contact support"
+        }
+      ]
+    },
+    {
+      "text": "How soon must I report a box that arrived crushed?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "bac77ff35e3ad7c57a30bedb8c9a26498e93fe6e52b237f8a3644c9df6366b73",
+          "filename": "shipping-and-delivery.md",
+          "start": 1604,
+          "end": 1675,
+          "excerpt": "Parcels damaged in transit must be reported within 48 hours of delivery"
+        }
+      ]
+    },
+    {
+      "text": "How long is the legal warranty?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "5f2556014dc36ac74665dbd504f60c6c0124273f1a0e5118457cb9958899a11a",
+          "filename": "warranty-and-repairs.md",
+          "start": 147,
+          "end": 245,
+          "excerpt": "All products sold by Kestrel & Fern carry a two-year legal warranty against manufacturing defects."
+        }
+      ]
+    },
+    {
+      "text": "Is there a lifetime guarantee on Fernline zippers?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "5f2556014dc36ac74665dbd504f60c6c0124273f1a0e5118457cb9958899a11a",
+          "filename": "warranty-and-repairs.md",
+          "start": 246,
+          "end": 373,
+          "excerpt": "Our own brand, Fernline, adds a lifetime guarantee on stitching and zippers for as long as the original buyer owns the product."
+        }
+      ]
+    },
+    {
+      "text": "Is a jacket whose waterproofing wore off after years covered?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "5f2556014dc36ac74665dbd504f60c6c0124273f1a0e5118457cb9958899a11a",
+          "filename": "warranty-and-repairs.md",
+          "start": 489,
+          "end": 582,
+          "excerpt": "Faded colours and worn-out waterproof coatings after years of use are considered normal wear."
+        }
+      ]
+    },
+    {
+      "text": "Who decides whether a defect is covered and how long does it take?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "5f2556014dc36ac74665dbd504f60c6c0124273f1a0e5118457cb9958899a11a",
+          "filename": "warranty-and-repairs.md",
+          "start": 780,
+          "end": 872,
+          "excerpt": "The repair workshop in Lisbon decides within 10 business days whether the defect is covered."
+        }
+      ]
+    },
+    {
+      "text": "When do I get my money back instead of a fix under warranty?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "5f2556014dc36ac74665dbd504f60c6c0124273f1a0e5118457cb9958899a11a",
+          "filename": "warranty-and-repairs.md",
+          "start": 1063,
+          "end": 1140,
+          "excerpt": "A refund is only offered when neither a repair nor a replacement is possible."
+        }
+      ]
+    },
+    {
+      "text": "How much does it cost to resole hiking boots?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "5f2556014dc36ac74665dbd504f60c6c0124273f1a0e5118457cb9958899a11a",
+          "filename": "warranty-and-repairs.md",
+          "start": 1346,
+          "end": 1380,
+          "excerpt": "Resoling hiking boots: 55 per pair"
+        }
+      ]
+    },
+    {
+      "text": "What is the price of a new tent pole section?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "5f2556014dc36ac74665dbd504f60c6c0124273f1a0e5118457cb9958899a11a",
+          "filename": "warranty-and-repairs.md",
+          "start": 1383,
+          "end": 1423,
+          "excerpt": "Replacing a broken tent pole section: 12"
+        }
+      ]
+    },
+    {
+      "text": "When does the workshop start a paid repair?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "5f2556014dc36ac74665dbd504f60c6c0124273f1a0e5118457cb9958899a11a",
+          "filename": "warranty-and-repairs.md",
+          "start": 1462,
+          "end": 1544,
+          "excerpt": "Customers receive a quote by e-mail and the work only starts after they accept it."
+        }
+      ]
+    },
+    {
+      "text": "Why does fixing a down jacket take an extra week?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "5f2556014dc36ac74665dbd504f60c6c0124273f1a0e5118457cb9958899a11a",
+          "filename": "warranty-and-repairs.md",
+          "start": 1582,
+          "end": 1721,
+          "excerpt": "Down jackets and sleeping bags are cleaned before any repair, at no extra cost, because feathers cannot be sewn safely when they are dirty."
+        }
+      ]
+    },
+    {
+      "text": "How many points do I get per euro?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d64c8669758e9177ebe1524e739ac533bd2b90d00f5bd0dcccc4518b14100c02",
+          "filename": "trailmark-loyalty-program.md",
+          "start": 310,
+          "end": 354,
+          "excerpt": "Members earn one point for every euro spent."
+        }
+      ]
+    },
+    {
+      "text": "Do I earn points when I buy a gift card?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d64c8669758e9177ebe1524e739ac533bd2b90d00f5bd0dcccc4518b14100c02",
+          "filename": "trailmark-loyalty-program.md",
+          "start": 393,
+          "end": 463,
+          "excerpt": "Points are not earned on gift cards, shipping fees or repair services."
+        }
+      ]
+    },
+    {
+      "text": "Why can't I use my points right after buying?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d64c8669758e9177ebe1524e739ac533bd2b90d00f5bd0dcccc4518b14100c02",
+          "filename": "trailmark-loyalty-program.md",
+          "start": 465,
+          "end": 566,
+          "excerpt": "Points become available 30 days after the purchase, once the return window for most items has passed."
+        }
+      ]
+    },
+    {
+      "text": "When do loyalty points expire?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d64c8669758e9177ebe1524e739ac533bd2b90d00f5bd0dcccc4518b14100c02",
+          "filename": "trailmark-loyalty-program.md",
+          "start": 567,
+          "end": 661,
+          "excerpt": "Points expire 24 months after they were earned if the member makes no purchase in that period."
+        }
+      ]
+    },
+    {
+      "text": "What do I need to reach the Ridge tier?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d64c8669758e9177ebe1524e739ac533bd2b90d00f5bd0dcccc4518b14100c02",
+          "filename": "trailmark-loyalty-program.md",
+          "start": 829,
+          "end": 892,
+          "excerpt": "| Ridge | 500 – 1,499 | Free standard delivery on every order |"
+        }
+      ]
+    },
+    {
+      "text": "How often is my membership level updated?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d64c8669758e9177ebe1524e739ac533bd2b90d00f5bd0dcccc4518b14100c02",
+          "filename": "trailmark-loyalty-program.md",
+          "start": 984,
+          "end": 1094,
+          "excerpt": "The tier is recalculated on the first day of every month based on the points earned in the previous 12 months."
+        }
+      ]
+    },
+    {
+      "text": "How many points make a 10 voucher?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d64c8669758e9177ebe1524e739ac533bd2b90d00f5bd0dcccc4518b14100c02",
+          "filename": "trailmark-loyalty-program.md",
+          "start": 1117,
+          "end": 1174,
+          "excerpt": "Every 200 points can be exchanged for a voucher worth 10."
+        }
+      ]
+    },
+    {
+      "text": "Can I give my points to my partner?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d64c8669758e9177ebe1524e739ac533bd2b90d00f5bd0dcccc4518b14100c02",
+          "filename": "trailmark-loyalty-program.md",
+          "start": 1356,
+          "end": 1465,
+          "excerpt": "they cannot be transferred to another member, except between two accounts registered at the same home address"
+        }
+      ]
+    },
+    {
+      "text": "Should I use fabric softener on a rain jacket?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d532a395e02d1dc0bce4b46ef7f572798c9da2fd2a0729593e80a18bd0f8c61f",
+          "filename": "product-care-guide.md",
+          "start": 322,
+          "end": 388,
+          "excerpt": "never with fabric softener, which blocks the pores of the membrane"
+        }
+      ]
+    },
+    {
+      "text": "How do I bring back the water repellency of my jacket?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d532a395e02d1dc0bce4b46ef7f572798c9da2fd2a0729593e80a18bd0f8c61f",
+          "filename": "product-care-guide.md",
+          "start": 678,
+          "end": 748,
+          "excerpt": "Restore it with a spray-on proofer, applied to the clean, damp jacket."
+        }
+      ]
+    },
+    {
+      "text": "I had to pack my tent in the rain. What now?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d532a395e02d1dc0bce4b46ef7f572798c9da2fd2a0729593e80a18bd0f8c61f",
+          "filename": "product-care-guide.md",
+          "start": 788,
+          "end": 874,
+          "excerpt": "If it must be packed in the rain, set it up again within 24 hours to dry it completely"
+        }
+      ]
+    },
+    {
+      "text": "How do I set up the poles of the KF-RB2?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d532a395e02d1dc0bce4b46ef7f572798c9da2fd2a0729593e80a18bd0f8c61f",
+          "filename": "product-care-guide.md",
+          "start": 1162,
+          "end": 1250,
+          "excerpt": "Its poles should be assembled from the middle outward to avoid stress on the shock cord."
+        }
+      ]
+    },
+    {
+      "text": "How should a sleeping bag be stored between trips?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d532a395e02d1dc0bce4b46ef7f572798c9da2fd2a0729593e80a18bd0f8c61f",
+          "filename": "product-care-guide.md",
+          "start": 1270,
+          "end": 1366,
+          "excerpt": "Store sleeping bags loosely in the large cotton storage sack, never compressed in the stuff sack"
+        }
+      ]
+    },
+    {
+      "text": "Why put tennis balls in the dryer with a down bag?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d532a395e02d1dc0bce4b46ef7f572798c9da2fd2a0729593e80a18bd0f8c61f",
+          "filename": "product-care-guide.md",
+          "start": 1518,
+          "end": 1585,
+          "excerpt": "must be dried with two or three tennis balls to break up the clumps"
+        }
+      ]
+    },
+    {
+      "text": "Can I dry wet boots next to the fireplace?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "d532a395e02d1dc0bce4b46ef7f572798c9da2fd2a0729593e80a18bd0f8c61f",
+          "filename": "product-care-guide.md",
+          "start": 1699,
+          "end": 1782,
+          "excerpt": "Direct heat cracks the leather and weakens the glue between the sole and the upper."
+        }
+      ]
+    },
+    {
+      "text": "What time do stores open on Sundays?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "abbbf7beb826bcb91a6cf7702b3fbb4da9bc94341b7d23442bd9a32ca9ebb6a9",
+          "filename": "store-staff-handbook.md",
+          "start": 269,
+          "end": 299,
+          "excerpt": "from 11:00 to 18:00 on Sundays"
+        }
+      ]
+    },
+    {
+      "text": "Up to what amount can a sales assistant approve a return alone?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "abbbf7beb826bcb91a6cf7702b3fbb4da9bc94341b7d23442bd9a32ca9ebb6a9",
+          "filename": "store-staff-handbook.md",
+          "start": 809,
+          "end": 869,
+          "excerpt": "Staff can approve returns up to a value of 300 on their own."
+        }
+      ]
+    },
+    {
+      "text": "When must a rental climbing rope be taken out of service?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "abbbf7beb826bcb91a6cf7702b3fbb4da9bc94341b7d23442bd9a32ca9ebb6a9",
+          "filename": "store-staff-handbook.md",
+          "start": 1291,
+          "end": 1370,
+          "excerpt": "retired after 50 rental days or immediately after any fall that loaded the rope"
+        }
+      ]
+    },
+    {
+      "text": "What discount do employees get on Fernline gear?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "abbbf7beb826bcb91a6cf7702b3fbb4da9bc94341b7d23442bd9a32ca9ebb6a9",
+          "filename": "store-staff-handbook.md",
+          "start": 1821,
+          "end": 1918,
+          "excerpt": "Employees receive a 30% discount on all products, and 40% on Fernline products, for personal use."
+        }
+      ]
+    },
+    {
+      "text": "Can I split my payment into several months?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "0b793bf32c3572083b5e08fb93fb5e4d63fa4201aa597495f18639ee2b3217ae",
+          "filename": "faq.txt",
+          "start": 59,
+          "end": 180,
+          "excerpt": "Orders above 200 can be paid in three monthly instalments without interest when paying with a credit card on our website."
+        }
+      ]
+    },
+    {
+      "text": "Until when can I cancel an order?",
+      "status": "approved",
+      "origin": "manual",
+      "evidence": [
+        {
+          "content_hash": "0b793bf32c3572083b5e08fb93fb5e4d63fa4201aa597495f18639ee2b3217ae",
+          "filename": "faq.txt",
+          "start": 483,
+          "end": 550,
+          "excerpt": "Orders can be changed or cancelled within one hour of being placed."
+        }
+      ]
+    }
+  ]
+}

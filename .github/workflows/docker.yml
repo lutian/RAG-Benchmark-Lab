@@ -1,0 +1,53 @@
+name: Docker
+
+# Builds the image and runs the Compose stack (db + api + ui) exactly as a user would,
+# then smoke-tests it end to end. No provider key is needed: the smoke test uses
+# full-text search, which works right after upload.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write .env for the stack
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=rag
+          POSTGRES_PASSWORD=ci-only-password
+          POSTGRES_DB=rag_lab
+          DATABASE_URL=postgresql+psycopg://rag:ci-only-password@db:5432/rag_lab
+          API_URL=http://api:8000
+          EOF
+
+      # Default build, local cross-encoder included (INSTALL_LOCAL_RERANKER=true).
+      - name: Build and start db, api and ui
+        run: docker compose up --detach --build --wait --wait-timeout 600 db api ui
+
+      - name: Local reranker is installed in the image
+        run: docker compose exec -T api python -c "import sentence_transformers"
+
+      - name: UI container reaches the API over the Compose network
+        run: >
+          docker compose exec -T ui python -c
+          "import os, urllib.request; urllib.request.urlopen(os.environ['API_URL'] + '/health')"
+
+      - name: Smoke test (collection, upload, full-text search, UI health)
+        run: python3 scripts/compose_smoke.py
+
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down --volumes
