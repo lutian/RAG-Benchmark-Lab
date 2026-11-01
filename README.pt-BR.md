@@ -15,8 +15,8 @@ Não é um chatbot que lê PDFs. Você envia qualquer corpus. O laboratório o d
 | 3. Recuperação | Busca vetorial exata, full-text do PostgreSQL (idioma por coleção) e híbrida com RRF; filtros, latência por etapa, posição por método | ✅ Concluída |
 | 4. Reranking | Híbrida + rerank como quarta estratégia: cross-encoder local (Sentence Transformers) ou qualquer API `/rerank`; posição antes/depois do reranking | ✅ Concluída |
 | 5. Geração | Respostas fundamentadas de qualquer LLM compatível com OpenAI: citações numeradas verificadas por parsing, dois caminhos de abstenção (sem evidência / modelo) | ✅ Concluída |
-| 6. Avaliação | Golden dataset, Recall@k, MRR, validade das citações | ⏳ Próxima |
-| 7. Apresentação | Dashboard comparativo | Planejada |
+| 6. Avaliação | Golden dataset (rascunhos do LLM + revisão humana, export/import), benchmark chunking × estratégia: Recall@k, MRR, latência, CPU, validade das citações, juiz LLM; relatório Markdown/JSON e CLI `rag-lab` | ✅ Concluída |
+| 7. Apresentação | Dashboard comparativo | ⏳ Próxima |
 
 ## Início rápido (Docker)
 
@@ -35,7 +35,7 @@ docker compose up --build -d
 | API (FastAPI) | http://localhost:8000 · documentação interativa em http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (apenas loopback) |
 
-Abra a UI, crie uma coleção na barra lateral, envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set. Clique em **Index chunk set** para gerar os embeddings com o provedor configurado no `.env`. Na página **Retrieval**, faça uma pergunta e compare lado a lado os resultados vetoriais, full-text, híbridos e com reranking. A primeira busca com reranking baixa o cross-encoder (~90 MB) para o volume `models`. Na página **Ask**, obtenha uma resposta com citações ao lado das fontes que o modelo recebeu.
+Abra a UI, crie uma coleção na barra lateral, envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set. Clique em **Index chunk set** para gerar os embeddings com o provedor configurado no `.env`. Na página **Retrieval**, faça uma pergunta e compare lado a lado os resultados vetoriais, full-text, híbridos e com reranking. A primeira busca com reranking baixa o cross-encoder (~90 MB) para o volume `models`. Na página **Ask**, obtenha uma resposta com citações ao lado das fontes que o modelo recebeu. Em **Golden dataset**, gere perguntas com o LLM, adicione as suas e aprove as que o benchmark deve usar; depois rode `docker compose exec api rag-lab benchmark --collection <nome>`.
 
 Modelos locais opcionais com Ollama:
 
@@ -161,15 +161,17 @@ As metas podem ser ajustadas conforme a dificuldade do corpus e a qualidade dos 
 
 ```text
 src/rag_lab/
-  domain/            spans, documentos, chunks, coleções, estratégias de chunking
-  application/       casos de uso (services/), ports/, erros
+  domain/            spans, documents, chunks, collections, chunking, retrieval, answers, evaluation
+  application/       services/ (ingestion, indexing, retrieval, answering, golden, benchmark),
+                     ports/, prompts.py, reporting.py, run_codec.py, errors.py
   adapters/
-    inbound/api/     app FastAPI, rotas, schemas
-    outbound/        parsers/, persistence/ (memória, postgres)
-  ui/                páginas Streamlit, tema, cliente da API
+    inbound/api/     FastAPI app, routes, schemas
+    outbound/        parsers/, persistence/ (memory, postgres), embeddings/, reranking/, generation/
+  ui/                Streamlit pages, theme, API client
+  cli.py             rag-lab command line
   bootstrap.py       composition root
-  config.py          configurações do .env
-migrations/          Alembic
-tests/               unit/, contracts/ (memória + PostgreSQL), utilitários de integração
-docs/                en/ e pt-BR/
+migrations/          Alembic revisions 0001-0004
+tests/               unit/, contracts/ (memory + PostgreSQL), integration/
+docs/en, docs/pt-BR  layer docs, configuration, testing, ADRs
+odd/tasks/           feature documents (specs, tasks, log) per phase
 ```

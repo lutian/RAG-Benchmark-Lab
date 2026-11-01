@@ -15,12 +15,13 @@ Each record states the decision first, then the alternatives that were rejected 
 | [007](#adr-007-streamlit-with-custom-css) | Streamlit with custom CSS | Accepted |
 | [008](#adr-008-collections-as-the-isolation-boundary) | Collections as the isolation boundary | Accepted |
 | [009](#adr-009-local-cross-encoder-plus-rerank-api-adapter) | Local cross-encoder plus `/rerank` API adapter | Accepted |
-| [010](#adr-010-synthetic-golden-questions-with-human-review) | Synthetic golden questions with human review | Planned |
+| [010](#adr-010-synthetic-golden-questions-with-human-review) | Synthetic golden questions with human review | Accepted |
 | [011](#adr-011-explicit-resumable-indexing) | Explicit, resumable indexing with model-bound collections | Accepted |
 | [012](#adr-012-one-vector-table-without-a-fixed-dimension) | One vector table without a fixed dimension | Accepted |
 | [013](#adr-013-postgresql-full-text-as-the-lexical-baseline) | PostgreSQL full-text (OR query, `ts_rank_cd`) as the lexical method | Accepted |
 | [014](#adr-014-exact-vector-search-for-the-benchmark) | Exact vector search, no ANN index | Accepted |
 | [015](#adr-015-numbered-citations-checked-by-parsing-and-a-sentinel-for-abstention) | Numbered citations checked by parsing, and a sentinel for abstention | Accepted |
+| [016](#adr-016-benchmark-runs-as-versioned-json-documents-plus-a-cli) | Benchmark runs as versioned JSON documents, plus a CLI | Accepted |
 
 ---
 
@@ -106,9 +107,9 @@ Each record states the decision first, then the alternatives that were rejected 
 
 ## ADR-010: Synthetic golden questions with human review
 
-**Decision (planned, phase 6):** the LLM proposes questions from sampled passages; the source passage becomes the labelled span; a Streamlit screen lets a human edit, approve or reject them and add their own.
+**Decision:** the LLM proposes questions from sampled passages; the source passage becomes the labelled span; a Streamlit screen lets a human edit, approve or reject them and add their own.
 
-**Why:** the corpus is arbitrary, so no labels exist up front. Fully synthetic questions copy the passage wording and inflate lexical (BM25) scores. Human review keeps the benchmark honest.
+**Why:** the corpus is arbitrary, so no labels exist up front. Fully synthetic questions copy the passage wording and inflate lexical (BM25) scores. Human review keeps the benchmark honest. The generation prompt asks the model to paraphrase instead of copying the passage, which reduces (but does not remove) that lexical bias; the review is where the rest is caught.
 
 ## ADR-011: Explicit, resumable indexing
 
@@ -175,3 +176,15 @@ Each record states the decision first, then the alternatives that were rejected 
 | Quote matching (answer must quote the source) | Penalises correct paraphrases; brittle with PDF whitespace |
 | LLM judge for every answer | Costs a second call per question; kept as an optional evaluation step, not the baseline metric |
 | Score threshold for abstention | Scores are not calibrated across models and corpora |
+
+## ADR-016: Benchmark runs as versioned JSON documents, plus a CLI
+
+**Decision:** a run (config, environment, per-question results, summaries) is stored as one JSONB document with a `format_version`, encoded by a single `run_codec` shared by the database, the API and the CLI. The `rag-lab` CLI runs benchmarks and writes the Markdown report and JSON next to each other.
+
+**Why:** runs are written once and always read whole; a document keeps them immutable and self-describing (models and settings in effect travel with the numbers). The CLI makes "a reproducible comparative report" a command, not a sequence of clicks.
+
+| Alternative | Why not |
+|-------------|---------|
+| One table row per question × strategy | Joins and migrations for data that is never queried row by row |
+| MLflow / Weights & Biases | Another service to run for what is a table and two files per run |
+| Reports only in the UI | Not scriptable, not diffable, not committable |

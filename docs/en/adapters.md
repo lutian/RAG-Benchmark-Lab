@@ -84,6 +84,7 @@ Every `openai.OpenAIError`, and an HTTP 200 carrying an error object instead of 
 | `unit_of_work.py` | One connection + one transaction per `with` block |
 | `migrations/versions/0001_reference_layer.py` | Alembic migration creating the reference-layer schema |
 | `migrations/versions/0002_embeddings.py` | Enables `vector`, adds the collection binding columns and `chunk_embeddings` |
+| `migrations/versions/0004_evaluation.py` | Adds `golden_questions`, `golden_evidence` and `benchmark_runs` |
 | `migrations/versions/0003_retrieval.py` | Adds `collections.fulltext_language` and `chunks.search_vector` (backfilled, GIN index) |
 
 ```mermaid
@@ -107,6 +108,8 @@ Schema highlights:
 - `chunk_embeddings(chunk_id → chunks.id ON DELETE CASCADE, collection_id, config_key, model, dimensions, embedding vector)`. The `embedding` column has **no fixed dimension**, because collections may use different models. `CHECK (vector_dims(embedding) = dimensions)` keeps each row honest. Re-chunking a document deletes its chunks, and their vectors go with them. See [ADR-012](decisions.md#adr-012-one-vector-table-without-a-fixed-dimension).
 - Migration 0002 runs `CREATE EXTENSION IF NOT EXISTS vector`, which needs a role allowed to create extensions (the Compose database owner is).
 - `collections.fulltext_language` and `chunks.search_vector` (migration 0003) support full-text search.
+- `golden_evidence.document_id → documents.id` has **no cascade** and is `DEFERRABLE INITIALLY DEFERRED`: a labelled document cannot be deleted on its own (its question would silently lose evidence), while deleting a collection, which cascades to questions and documents in any order, passes the check at commit.
+- `benchmark_runs.payload` is one JSONB document per run (`run_codec`, `format_version` 1): runs are written once and read whole, so normalising per-question rows would add joins and no queries.
 
 ### Search (`PostgresSearchRepository`)
 
@@ -140,6 +143,12 @@ The same contract backed by dictionaries, with real rollback (each transaction w
 | `GET` | `/collections/{id}/chunk-sets/{key}/chunks?document_id=` | Chunks with spans, pages and heading paths |
 | `POST` | `/collections/{id}/chunk-sets/{key}/index?rebuild=false` | Embed pending chunks; returns total / already indexed / embedded / seconds |
 | `GET` | `/collections/{id}/index` | Embedding binding and `embedded / total` per chunk set |
+| `GET` `POST` | `/collections/{id}/golden` | List questions (`?status=`) with evidence excerpts; add a manual question `{question, document_id, excerpt}` |
+| `POST` | `/collections/{id}/golden/generate` | `{count, seed}`: LLM drafts from sampled passages |
+| `PATCH` `DELETE` | `/collections/{id}/golden/{qid}` | Edit `{text, status}`; delete |
+| `GET` `POST` | `/collections/{id}/golden/export` · `/import` | Portable JSON by content hash; import reports `{imported, skipped}` |
+| `POST` `GET` | `/collections/{id}/benchmarks` | Run `{chunk_sets, methods, ks, mrr_cutoff, generation, judge, answer_top_k}` (defaults: everything, retrieval only); list runs |
+| `GET` | `/collections/{id}/benchmarks/{run}` · `/report` | Full run JSON (per-question results); Markdown report |
 | `POST` | `/collections/{id}/answer` | Body `{question, chunk_set, method, top_k, document_ids}`; returns the answer, `abstained` + `abstention_reason`, `citations` (number → source), `citations_valid`, `invalid_citations`, every `source`, model, token usage and timings (`retrieval` stages, `generation_ms`, `total_ms`) |
 | `POST` | `/collections/{id}/search` | Body `{query, chunk_set, method: vector\|fulltext\|hybrid\|hybrid_rerank, top_k, document_ids}`; returns ranked hits with spans, score, `ranks` per stage and timings |
 
@@ -150,6 +159,21 @@ Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).
 - The upload route reads **at most `MAX_UPLOAD_MB` + 1 byte**, so oversized files are rejected without being buffered whole.
 
 **Why FastAPI?** Typed request validation, automatic OpenAPI docs and dependency injection, at very low ceremony.
+
+## CLI — `rag_lab/cli.py`
+
+`rag-lab` (installed as a console script) uses the same composition root and `.env` as the API:
+
+```bash
+rag-lab benchmark --collection handbook --out reports/                 # all chunk sets x 4 methods
+rag-lab benchmark --collection handbook --method hybrid --method hybrid_rerank --generation --judge
+rag-lab runs --collection handbook                                     # stored runs
+rag-lab report --collection handbook --run <run-id> --out reports/    # re-export a run
+```
+
+Each run writes `benchmark-<timestamp>-<id>.md` and `.json` and is also stored, so it appears in the UI. Errors print `error: …` and exit with code 1.
+
+**Why a CLI besides the API?** Reproducibility: a benchmark is a command you can put in a README, a Makefile or CI, and its output files can be committed next to the code that produced them.
 
 ## Composition root — `bootstrap.py`
 
@@ -162,6 +186,7 @@ Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Entry point and navigation |
 | `pages/home.py` | Overview of both pipelines |
 | `pages/ingestion.py` | Collections (sidebar), uploads, document list, **chunk inspector**, indexing progress and the **Index chunk set** action (with optional rebuild) |
+| `pages/golden.py` | **Golden dataset review**: progress toward 50 approved questions, LLM generation and manual questions, each card with its highlighted evidence and edit / approve / reject / delete, JSON export and import |
 | `pages/ask.py` | **Grounded answers** in three panels: scope and strategy (sidebar), the answer with citation badges (unknown sources flagged) and the abstention reason, and every source with the cited ones marked |
 | `pages/retrieval.py` | **Method comparison**: one question, four columns (vector, full-text, hybrid, hybrid + rerank; a toggle skips reranking), each hit with score, rank per stage (including its hybrid rank before reranking), location and highlighted query terms; document filter and `top_k` in the sidebar |
 | `highlight.py` | Pure functions rendering chunk spans as alternating highlights (overlaps get their own colour) and marking query terms as evidence |

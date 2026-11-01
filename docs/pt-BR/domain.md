@@ -13,6 +13,7 @@ O domínio é o vocabulário do laboratório: **spans, documentos, chunks, cole�
 | `chunks.py` | Unidade recuperável derivada de um documento | `Chunk` |
 | `collections.py` | Fronteira de isolamento, chunk sets a construir, vínculo de embeddings | `Collection`, `EmbeddingMismatchError` |
 | `answers.py` | Parsing de citações, validade das citações, sentinela de abstenção | `extract_citations()`, `check_citations()`, `CitationCheck`, `ABSTENTION` |
+| `evaluation.py` | Perguntas golden com spans de evidência, relevância por sobreposição, métricas de ranking, execuções de benchmark e resumos | `GoldenQuestion`, `Evidence`, `score_ranking()`, `BenchmarkConfig`, `BenchmarkRun`, `summarize()`, `head_to_head()`, `diagnose_failures()` |
 | `retrieval.py` | Métodos de busca, resultados com score e fusão de rankings | `SearchMethod`, `ScoredChunk`, `reciprocal_rank_fusion()` |
 | `embeddings.py` | Qual modelo gerou um vetor e seu tamanho | `EmbeddingSpec` |
 | `chunking/config.py` | Como fazer o chunking | `ChunkingConfig`, `ChunkingStrategy` |
@@ -137,3 +138,23 @@ Um chunk bem posicionado pelos **dois** métodos vence um chunk que ficou em pri
 **Por que determinístico?** A meta do projeto "citações válidas ≥ 95%" precisa ser barata e reproduzível. O parsing mede *se as citações apontam para fontes reais*; se a fonte citada de fato sustenta a frase é uma questão semântica, deixada para o juiz LLM opcional (fase de avaliação).
 
 **Por que uma sentinela em vez de saída JSON?** Saída estruturada (`response_format`) não é implementada por todos os servidores compatíveis com OpenAI (llama.cpp, Ollama mais antigo, algumas rotas do OpenRouter). Uma primeira palavra fixa funciona em qualquer um e é trivial de detectar.
+
+## Avaliação — perguntas golden e métricas
+
+**Pergunta golden:** texto + uma ou mais `Evidence(document_id, span)` + origem (`synthetic` / `manual`) + status (`draft` → `approved` / `rejected`). A evidência aponta para a camada de referência, nunca para chunks, então **um único dataset avalia todos os chunk sets** (ADR-002).
+
+**Relevância:** um chunk recuperado é relevante quando está no documento da evidência e seu span se sobrepõe ao span da evidência (`overlap > 0`; encostar não é sobrepor).
+
+| Métrica | Definição (por pergunta, depois a média) |
+|---------|------------------------------------------|
+| Recall@k | Fração dos spans de evidência da pergunta tocados pelos top-k chunks. Com um único span, é "encontrou no top k?" |
+| MRR@10 | `1 / posição` do primeiro chunk relevante, se estiver no top 10; senão 0 |
+| Latência p50 / p95 | Percentis (nearest-rank) do tempo de relógio de cada recuperação |
+| CPU ms | Tempo de CPU do processo por recuperação (mostra o custo do reranking local que o tempo de relógio esconde atrás de I/O) |
+| Taxa de abstenção | Fração das respostas geradas que se abstiveram |
+| Citações válidas | Fração das respostas **não abstidas** cujas citações são todas válidas (≥ 1 e dentro do intervalo) |
+| Sustentadas | Fração das respostas não abstidas que o juiz LLM classificou como `SUPPORTED` |
+
+**Ajudas de diagnóstico:** `head_to_head(results, chunk_set, a, b)` conta vitórias por pergunta pela posição recíproca (ex.: full-text vs vetorial). `diagnose_failures(results, answer_top_k)` separa as respostas ruins em **falhas de recuperação** (a evidência não estava entre as fontes que o LLM viu) e **erros de geração** (ela estava lá).
+
+**Por que sobreposição de spans e não "pelo menos 50% da evidência"?** Um limiar favoreceria chunks grandes (cobrem mais) e acrescentaria um parâmetro para ajustar. Qualquer sobreposição significa que o chunk contém parte da resposta, que é o que o leitor precisa; com vários spans de evidência, o Recall@k continua premiando cobrir todos.

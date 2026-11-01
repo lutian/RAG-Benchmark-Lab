@@ -12,6 +12,9 @@ The application layer holds the **use cases** (what the system can do) and the *
 | `services/indexing.py` | `IndexingService`: embed chunk sets, binding, progress |
 | `services/answering.py` | `AnswerService`: retrieval → numbered context → LLM → checked citations or abstention |
 | `prompts.py` | The grounded-answer prompt (rules, numbered sources) |
+| `services/golden.py` | `GoldenDatasetService`: synthetic and manual questions, review, export/import |
+| `services/benchmark.py` | `BenchmarkService`: the chunking × strategy matrix on approved questions |
+| `reporting.py` / `run_codec.py` | Markdown report of a run; versioned JSON encoding of runs |
 | `services/retrieval.py` | `RetrievalService`: vector, full-text, hybrid and reranked hybrid search with filters and timings |
 | `ports/parsing.py` | `DocumentParser` port and its output `ParsedDocument` |
 | `ports/embeddings.py` | `Embedder` (the model) and `EmbeddingRepository` (the vector store) ports |
@@ -83,6 +86,31 @@ Design points:
 - **The prompt lives in `application/prompts.py`**: one versioned place, unit-tested for its rules (numbered sources, sentinel, answer in the question's language). Sources are labelled with page and section so the model can tell them apart.
 - **No score threshold.** Vector and RRF scores are not calibrated across corpora and models, so a fixed cut-off would abstain arbitrarily. The model decides from the content; the benchmark measures how often it is right to.
 
+## `GoldenDatasetService`
+
+| Use case | Behaviour |
+|----------|-----------|
+| `generate(id, count, seed)` | Cuts every document into ~400-character passages with the recursive chunker (independent of the collection's chunk sets), drops passages under 100 characters or already used as evidence, samples them with `random.Random(seed)` round-robin across documents, and asks the LLM for one question per passage (`SKIP` = no factual content). Each question is a **draft**, committed as soon as it exists |
+| `add_manual(id, text, document_id, excerpt)` | Locates the pasted excerpt in the canonical text, ignoring whitespace differences (PDF line breaks); 422 when it is not there |
+| `questions` / `views` / `update` / `delete` | List (optionally by status), list with excerpts and filenames for review, edit text or status, delete |
+| `export(id)` / `import_(id, payload)` | Portable JSON whose evidence carries the document **content hash**, span and excerpt; import maps hashes to the target collection's documents and skips questions whose files are missing |
+
+**Why seeded passages from the reference layer?** The same seed and documents give the same passages, so a dataset can be regenerated; using the reference text (not a chunk set) keeps the labels independent of the chunking under test.
+
+## `BenchmarkService`
+
+Runs `BenchmarkConfig` (chunk sets × methods, `ks`, MRR cut-off, optional generation and judge) on the **approved** questions:
+
+1. Validate: chunk sets exist (404) and approved questions exist (422).
+2. **Warm up** each chunk set × method once, unmeasured. The first reranked query loads the cross-encoder; without warm-up that cost would land on one random question. Warm-up also fails fast (e.g. 409 for an unindexed chunk set) before anything is measured.
+3. For every chunk set × method × question: retrieve `max(ks, mrr_cutoff)` chunks, timing wall clock and CPU, then score with `score_ranking`.
+4. With `generation`: answer with `answer_top_k` sources (abstention, citation validity, tokens); with `judge`: one more LLM call returns `SUPPORTED` / `UNSUPPORTED` (`parse_verdict`; anything else counts as unknown).
+5. `summarize` per strategy and store the run.
+
+## Reports — `reporting.py` and `run_codec.py`
+
+`markdown_report(run, collection_name)` renders: setup (models and settings in effect), the retrieval matrix with ✅/❌ against the project targets, head-to-head duels (lexical vs vector, hybrid vs vector, rerank vs hybrid), generation quality and the retrieval-vs-generation diagnosis. `best_strategy` (highest Recall@5, then MRR, then lowest p50) is shared by the report, API and CLI. `run_codec` is the single, versioned JSON format of a run (stored in PostgreSQL, served by the API, written by the CLI).
+
 ## Ports
 
 ### `ChatModel`
@@ -121,6 +149,8 @@ It returns canonical text, structural elements and metadata, or raises `Unsuppor
 | `ChunkRepository` | Replace one document's chunks in one chunk set; list a chunk set (optionally one document) |
 | `EmbeddingRepository` | Pending chunks of a chunk set, save vectors, count, delete all vectors of a collection |
 | `SearchRepository` | `vector(...)`: exact nearest neighbours by cosine similarity; `fulltext(...)`: chunks sharing at least one normalised term with the query, ranked by coverage. Both scoped by collection and chunk set, with an optional document filter |
+| `GoldenQuestionRepository` | Add (evidence must belong to the collection), update text/status only, get, list by status, delete |
+| `BenchmarkRunRepository` | Add, get, list newest first |
 | `UnitOfWork` | Context manager exposing the repositories; `commit()` makes changes visible, leaving the block without committing rolls back |
 
 ### `Embedder`

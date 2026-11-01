@@ -15,8 +15,8 @@ This is not a chatbot that reads PDFs. You upload any corpus. The lab chunks it 
 | 3. Retrieval | Exact vector search, PostgreSQL full-text (per-collection language) and hybrid RRF; filters, per-stage latency, rank per method | ✅ Done |
 | 4. Reranking | Hybrid + rerank as the fourth strategy: local cross-encoder (Sentence Transformers) or any `/rerank` API; rank before/after reranking | ✅ Done |
 | 5. Generation | Grounded answers from any OpenAI-compatible LLM: numbered citations checked by parsing, two abstention paths (no evidence / model) | ✅ Done |
-| 6. Evaluation | Golden dataset, Recall@k, MRR, citation validity | ⏳ Next |
-| 7. Presentation | Comparative dashboard | Planned |
+| 6. Evaluation | Golden dataset (LLM drafts + human review, export/import), chunking × strategy benchmark: Recall@k, MRR, latency, CPU, citation validity, LLM judge; Markdown/JSON report and `rag-lab` CLI | ✅ Done |
+| 7. Presentation | Comparative dashboard | ⏳ Next |
 
 ## Quick start (Docker)
 
@@ -35,7 +35,7 @@ docker compose up --build -d
 | API (FastAPI) | http://localhost:8000 · interactive docs at http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (loopback only) |
 
-Then open the UI, create a collection in the sidebar, upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set. Press **Index chunk set** to embed it with the provider configured in `.env`. On the **Retrieval** page, ask a question and compare vector, full-text, hybrid and reranked results side by side. The first reranked search downloads the cross-encoder (~90 MB) into the `models` volume. On the **Ask** page, get an answer with citations next to the sources it was given.
+Then open the UI, create a collection in the sidebar, upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set. Press **Index chunk set** to embed it with the provider configured in `.env`. On the **Retrieval** page, ask a question and compare vector, full-text, hybrid and reranked results side by side. The first reranked search downloads the cross-encoder (~90 MB) into the `models` volume. On the **Ask** page, get an answer with citations next to the sources it was given. On **Golden dataset**, generate questions with the LLM, add your own, and approve the ones the benchmark should use; then run `docker compose exec api rag-lab benchmark --collection <name>`.
 
 Optional local models with Ollama:
 
@@ -161,15 +161,17 @@ These targets may be adjusted to the corpus difficulty and the quality of the re
 
 ```text
 src/rag_lab/
-  domain/            spans, documents, chunks, collections, chunking strategies
-  application/       use cases (services/), ports/, errors
+  domain/            spans, documents, chunks, collections, chunking, retrieval, answers, evaluation
+  application/       services/ (ingestion, indexing, retrieval, answering, golden, benchmark),
+                     ports/, prompts.py, reporting.py, run_codec.py, errors.py
   adapters/
     inbound/api/     FastAPI app, routes, schemas
-    outbound/        parsers/, persistence/ (memory, postgres)
+    outbound/        parsers/, persistence/ (memory, postgres), embeddings/, reranking/, generation/
   ui/                Streamlit pages, theme, API client
+  cli.py             rag-lab command line
   bootstrap.py       composition root
-  config.py          settings from .env
-migrations/          Alembic
-tests/               unit/, contracts/ (memory + PostgreSQL), integration helpers
-docs/                en/ and pt-BR/
+migrations/          Alembic revisions 0001-0004
+tests/               unit/, contracts/ (memory + PostgreSQL), integration/
+docs/en, docs/pt-BR  layer docs, configuration, testing, ADRs
+odd/tasks/           feature documents (specs, tasks, log) per phase
 ```

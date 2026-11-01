@@ -14,6 +14,7 @@ The domain is the vocabulary of the lab: **spans, documents, chunks, collections
 | `collections.py` | Isolation boundary, chunk sets to build, embedding binding | `Collection`, `EmbeddingMismatchError` |
 | `embeddings.py` | Which model produced a vector and its length | `EmbeddingSpec` |
 | `answers.py` | Citation parsing, citation validity, abstention sentinel | `extract_citations()`, `check_citations()`, `CitationCheck`, `ABSTENTION` |
+| `evaluation.py` | Golden questions with evidence spans, span-overlap relevance, ranking metrics, benchmark runs and summaries | `GoldenQuestion`, `Evidence`, `score_ranking()`, `BenchmarkConfig`, `BenchmarkRun`, `summarize()`, `head_to_head()`, `diagnose_failures()` |
 | `retrieval.py` | Search methods, scored hits and rank fusion | `SearchMethod`, `ScoredChunk`, `reciprocal_rank_fusion()` |
 | `chunking/config.py` | How to chunk | `ChunkingConfig`, `ChunkingStrategy` |
 | `chunking/strategies.py` | The chunking algorithms | `chunk_document()` |
@@ -137,3 +138,23 @@ A chunk ranked high by **both** methods beats a chunk ranked first by only one. 
 **Why deterministic?** The project target "valid citations ≥ 95%" must be cheap and reproducible. Parsing measures *whether citations point to real sources*; whether the cited source actually supports the sentence is a semantic question left to the optional LLM judge (evaluation phase).
 
 **Why a sentinel instead of JSON output?** Structured output (`response_format`) is not implemented by every OpenAI-compatible server (llama.cpp, older Ollama, some OpenRouter routes). A fixed first word works everywhere and is trivial to detect.
+
+## Evaluation — golden questions and metrics
+
+**Golden question:** text + one or more `Evidence(document_id, span)` + origin (`synthetic` / `manual`) + status (`draft` → `approved` / `rejected`). Evidence points at the reference layer, never at chunks, so **one dataset scores every chunk set** (ADR-002).
+
+**Relevance:** a retrieved chunk is relevant when it is in the evidence's document and its span overlaps the evidence span (`overlap > 0`; touching is not overlapping).
+
+| Metric | Definition (per question, then averaged) |
+|--------|------------------------------------------|
+| Recall@k | Share of the question's evidence spans touched by the top-k chunks. With one span it is "found in the top k?" |
+| MRR@10 | `1 / rank` of the first relevant chunk if it is within the top 10, else 0 |
+| p50 / p95 latency | Nearest-rank percentiles of the wall time of each retrieval |
+| CPU ms | Process CPU time per retrieval (captures local reranking cost that wall time hides behind I/O) |
+| Abstention rate | Share of generated answers that abstained |
+| Valid citations | Share of **non-abstained** answers whose citations are all valid (≥ 1 and in range) |
+| Supported | Share of non-abstained answers the LLM judge called `SUPPORTED` |
+
+**Diagnosis helpers:** `head_to_head(results, chunk_set, a, b)` counts per-question wins by reciprocal rank (e.g. full-text vs vector). `diagnose_failures(results, answer_top_k)` splits bad answers into **retrieval misses** (evidence not among the sources the LLM saw) and **generation errors** (it was there).
+
+**Why span overlap and not "at least 50% of the evidence"?** A threshold would favour large chunks (they cover more) and add a tuning knob. Any overlap means the chunk contains part of the answer, which is what a reader needs; Recall@k with several evidence spans still rewards covering all of them.

@@ -124,6 +124,20 @@ flowchart LR
     C --> ANS[Resposta + fontes + validade das citações + tempos]
 ```
 
+### Avaliação (implementada)
+
+```mermaid
+flowchart LR
+    D[Documentos] -->|trechos com semente| G[Rascunhos do LLM]
+    M[Pergunta manual + trecho] --> R
+    G --> R[Revisão humana<br/>aprovar / rejeitar / editar]
+    R -->|aprovadas| B[BenchmarkService]
+    B -->|chunk sets x métodos| S[Recall@k, MRR, latência, CPU]
+    B -->|opcional| A[Respostas: citações, abstenção, juiz]
+    S --> P[Execução gravada + relatório Markdown/JSON]
+    A --> P
+```
+
 ## A camada de referência: por que o chunking pode variar livremente
 
 Esta é a decisão de design mais importante do projeto. Veja o [ADR-002](decisions.md#adr-002-camada-de-referência-independente-do-chunking).

@@ -84,6 +84,7 @@ Todo `openai.OpenAIError`, e também um HTTP 200 com um objeto de erro no lugar 
 | `unit_of_work.py` | Uma conexão + uma transação por bloco `with` |
 | `migrations/versions/0001_reference_layer.py` | Migração Alembic que cria o schema da camada de referência |
 | `migrations/versions/0002_embeddings.py` | Habilita `vector`, adiciona as colunas de vínculo da coleção e `chunk_embeddings` |
+| `migrations/versions/0004_evaluation.py` | Adiciona `golden_questions`, `golden_evidence` e `benchmark_runs` |
 | `migrations/versions/0003_retrieval.py` | Adiciona `collections.fulltext_language` e `chunks.search_vector` (preenchido para dados existentes, índice GIN) |
 
 ```mermaid
@@ -107,6 +108,8 @@ Destaques do schema:
 - `chunk_embeddings(chunk_id → chunks.id ON DELETE CASCADE, collection_id, config_key, model, dimensions, embedding vector)`. A coluna `embedding` **não tem dimensão fixa**, porque as coleções podem usar modelos diferentes. `CHECK (vector_dims(embedding) = dimensions)` garante a consistência de cada linha. Refazer o chunking de um documento apaga seus chunks, e os vetores vão junto. Veja o [ADR-012](decisions.md#adr-012-uma-tabela-de-vetores-sem-dimensão-fixa).
 - A migração 0002 executa `CREATE EXTENSION IF NOT EXISTS vector`, o que exige um usuário com permissão para criar extensões (o dono do banco no Compose tem).
 - `collections.fulltext_language` e `chunks.search_vector` (migração 0003) sustentam a busca full-text.
+- `golden_evidence.document_id → documents.id` **não tem cascade** e é `DEFERRABLE INITIALLY DEFERRED`: um documento rotulado não pode ser apagado sozinho (sua pergunta perderia a evidência em silêncio), enquanto apagar uma coleção, que se propaga para perguntas e documentos em qualquer ordem, passa na verificação feita no commit.
+- `benchmark_runs.payload` é um documento JSONB por execução (`run_codec`, `format_version` 1): execuções são escritas uma vez e lidas inteiras, então normalizar as linhas por pergunta acrescentaria joins sem nenhuma consulta que precise deles.
 
 ### Busca (`PostgresSearchRepository`)
 
@@ -140,6 +143,12 @@ O mesmo contrato sobre dicionários, com rollback real (cada transação trabalh
 | `GET` | `/collections/{id}/chunk-sets/{key}/chunks?document_id=` | Chunks com spans, páginas e caminhos de títulos |
 | `POST` | `/collections/{id}/chunk-sets/{key}/index?rebuild=false` | Gera os embeddings dos chunks pendentes; retorna total / já indexados / gerados / segundos |
 | `GET` | `/collections/{id}/index` | Vínculo de embeddings e `embedded / total` por chunk set |
+| `GET` `POST` | `/collections/{id}/golden` | Listar perguntas (`?status=`) com os trechos de evidência; adicionar uma pergunta manual `{question, document_id, excerpt}` |
+| `POST` | `/collections/{id}/golden/generate` | `{count, seed}`: rascunhos do LLM a partir de trechos sorteados |
+| `PATCH` `DELETE` | `/collections/{id}/golden/{qid}` | Editar `{text, status}`; apagar |
+| `GET` `POST` | `/collections/{id}/golden/export` · `/import` | JSON portável por hash de conteúdo; a importação informa `{imported, skipped}` |
+| `POST` `GET` | `/collections/{id}/benchmarks` | Executar `{chunk_sets, methods, ks, mrr_cutoff, generation, judge, answer_top_k}` (padrão: tudo, só recuperação); listar execuções |
+| `GET` | `/collections/{id}/benchmarks/{run}` · `/report` | JSON completo da execução (resultados por pergunta); relatório Markdown |
 | `POST` | `/collections/{id}/answer` | Corpo `{question, chunk_set, method, top_k, document_ids}`; retorna a resposta, `abstained` + `abstention_reason`, `citations` (número → fonte), `citations_valid`, `invalid_citations`, todas as `sources`, modelo, uso de tokens e tempos (etapas de `retrieval`, `generation_ms`, `total_ms`) |
 | `POST` | `/collections/{id}/search` | Corpo `{query, chunk_set, method: vector\|fulltext\|hybrid\|hybrid_rerank, top_k, document_ids}`; retorna resultados ordenados com spans, score, `ranks` por etapa e tempos |
 
@@ -150,6 +159,21 @@ A documentação interativa fica em `http://localhost:8000/docs` (OpenAPI).
 - A rota de upload lê **no máximo `MAX_UPLOAD_MB` + 1 byte**, então arquivos grandes demais são rejeitados sem serem carregados inteiros na memória.
 
 **Por que FastAPI?** Validação tipada das requisições, documentação OpenAPI automática e injeção de dependências, com pouquíssima cerimônia.
+
+## CLI — `rag_lab/cli.py`
+
+O `rag-lab` (instalado como script de console) usa o mesmo composition root e o mesmo `.env` da API:
+
+```bash
+rag-lab benchmark --collection handbook --out reports/                 # todos os chunk sets x 4 métodos
+rag-lab benchmark --collection handbook --method hybrid --method hybrid_rerank --generation --judge
+rag-lab runs --collection handbook                                     # execuções gravadas
+rag-lab report --collection handbook --run <run-id> --out reports/    # reexportar uma execução
+```
+
+Cada execução escreve `benchmark-<timestamp>-<id>.md` e `.json` e também fica gravada, então aparece na UI. Erros imprimem `error: …` e saem com código 1.
+
+**Por que um CLI além da API?** Reprodutibilidade: um benchmark vira um comando que cabe num README, num Makefile ou no CI, e os arquivos gerados podem ser versionados ao lado do código que os produziu.
 
 ## Composition root — `bootstrap.py`
 
@@ -162,6 +186,7 @@ A documentação interativa fica em `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Ponto de entrada e navegação |
 | `pages/home.py` | Visão geral dos dois pipelines |
 | `pages/ingestion.py` | Coleções (barra lateral), uploads, lista de documentos, **inspetor de chunks**, progresso da indexação e a ação **Index chunk set** (com rebuild opcional) |
+| `pages/golden.py` | **Revisão do golden dataset**: progresso até 50 perguntas aprovadas, geração pelo LLM e perguntas manuais, cada card com a evidência destacada e editar / aprovar / rejeitar / apagar, exportação e importação em JSON |
 | `pages/ask.py` | **Respostas fundamentadas** em três painéis: escopo e estratégia (barra lateral), a resposta com as citações em destaque (fontes desconhecidas sinalizadas) e o motivo da abstenção, e todas as fontes, com as citadas marcadas |
 | `pages/retrieval.py` | **Comparação de métodos**: uma pergunta, quatro colunas (vetorial, full-text, híbrida, híbrida + rerank; uma chave desliga o reranking), cada resultado com score, posição por etapa (inclusive a posição na híbrida antes do reranking), localização e termos da pergunta destacados; filtro por documento e `top_k` na barra lateral |
 | `highlight.py` | Funções puras que desenham os spans dos chunks com destaques alternados (sobreposições ganham uma cor própria) e marcam os termos da pergunta como evidência |

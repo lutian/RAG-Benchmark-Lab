@@ -15,12 +15,13 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 | [007](#adr-007-streamlit-com-css-customizado) | Streamlit com CSS customizado | Aceita |
 | [008](#adr-008-coleções-como-fronteira-de-isolamento) | Coleções como fronteira de isolamento | Aceita |
 | [009](#adr-009-cross-encoder-local-e-adaptador-de-api-de-rerank) | Cross-encoder local e adaptador de API `/rerank` | Aceita |
-| [010](#adr-010-perguntas-golden-sintéticas-com-revisão-humana) | Perguntas golden sintéticas com revisão humana | Planejada |
+| [010](#adr-010-perguntas-golden-sintéticas-com-revisão-humana) | Perguntas golden sintéticas com revisão humana | Aceita |
 | [011](#adr-011-indexação-explícita-e-retomável) | Indexação explícita e retomável, com coleções vinculadas ao modelo | Aceita |
 | [012](#adr-012-uma-tabela-de-vetores-sem-dimensão-fixa) | Uma tabela de vetores sem dimensão fixa | Aceita |
 | [013](#adr-013-full-text-do-postgresql-como-base-lexical) | Full-text do PostgreSQL (consulta com OU, `ts_rank_cd`) como método lexical | Aceita |
 | [014](#adr-014-busca-vetorial-exata-para-o-benchmark) | Busca vetorial exata, sem índice ANN | Aceita |
 | [015](#adr-015-citações-numeradas-verificadas-por-parsing-e-sentinela-de-abstenção) | Citações numeradas verificadas por parsing e sentinela de abstenção | Aceita |
+| [016](#adr-016-execuções-de-benchmark-como-documentos-json-versionados-e-um-cli) | Execuções de benchmark como documentos JSON versionados, e um CLI | Aceita |
 
 ---
 
@@ -106,9 +107,9 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 
 ## ADR-010: Perguntas golden sintéticas com revisão humana
 
-**Decisão (planejada, fase 6):** o LLM propõe perguntas a partir de trechos amostrados; o trecho de origem vira o span rotulado; uma tela no Streamlit permite que uma pessoa edite, aprove ou rejeite as perguntas e adicione as suas.
+**Decisão:** o LLM propõe perguntas a partir de trechos amostrados; o trecho de origem vira o span rotulado; uma tela no Streamlit permite que uma pessoa edite, aprove ou rejeite as perguntas e adicione as suas.
 
-**Por quê:** o corpus é arbitrário, então não existem rótulos de antemão. Perguntas totalmente sintéticas copiam a redação do trecho e inflam as pontuações lexicais (BM25). A revisão humana mantém o benchmark honesto.
+**Por quê:** o corpus é arbitrário, então não existem rótulos de antemão. Perguntas totalmente sintéticas copiam a redação do trecho e inflam as pontuações lexicais (BM25). A revisão humana mantém o benchmark honesto. O prompt de geração pede que o modelo parafraseie em vez de copiar o trecho, o que reduz (mas não elimina) esse viés lexical; o resto é pego na revisão.
 
 ## ADR-011: Indexação explícita e retomável
 
@@ -175,3 +176,15 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 | Correspondência de citações literais (a resposta precisa citar o trecho) | Penaliza paráfrases corretas; frágil com os espaços em branco de PDFs |
 | Juiz LLM em toda resposta | Custa uma segunda chamada por pergunta; fica como etapa opcional da avaliação, não como métrica base |
 | Limiar de score para abstenção | Os scores não são calibrados entre modelos e corpora |
+
+## ADR-016: Execuções de benchmark como documentos JSON versionados, e um CLI
+
+**Decisão:** uma execução (configuração, ambiente, resultados por pergunta, resumos) é gravada como um único documento JSONB com `format_version`, codificado por um único `run_codec` compartilhado pelo banco, pela API e pelo CLI. O CLI `rag-lab` executa benchmarks e escreve o relatório Markdown e o JSON lado a lado.
+
+**Por quê:** execuções são escritas uma vez e sempre lidas inteiras; um documento as mantém imutáveis e autodescritivas (os modelos e parâmetros em uso viajam junto com os números). O CLI transforma "um relatório comparativo reproduzível" em um comando, e não em uma sequência de cliques.
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| Uma linha de tabela por pergunta × estratégia | Joins e migrações para dados que nunca são consultados linha a linha |
+| MLflow / Weights & Biases | Mais um serviço para rodar, para o que é uma tabela e dois arquivos por execução |
+| Relatórios só na UI | Não dá para automatizar, comparar com diff nem versionar |

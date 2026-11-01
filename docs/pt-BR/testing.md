@@ -46,6 +46,10 @@ Tudo acima do adaptador usa `tests/fakes.py::FakeEmbedder`: vetores determiníst
 
 `tests/unit/adapters/generation/` roda o `OpenAICompatibleChatModel` contra um stub local de `/v1/chat/completions`: mensagens e modelo na requisição, `temperature` / `reasoning_effort` enviados só quando configurados, uso de tokens presente ou ausente, erros HTTP e hosts inacessíveis. Acima do adaptador, o `tests/fakes.py::FakeChatModel` devolve respostas roteirizadas e registra os prompts.
 
+## Testando a avaliação
+
+As funções de métrica são testadas com rankings calculados à mão (`tests/unit/domain/test_evaluation.py`). O `BenchmarkService` roda de ponta a ponta em memória com `ConceptEmbedder`, `FakeReranker` e um `FakeChatModel` que responde e julga, verificando o formato da matriz, o aquecimento (uma chamada extra ao reranker por método) e as taxas de geração e do juiz. O CLI é testado com um container em memória e um diretório de saída temporário. O armazenamento do golden dataset tem testes de contrato nos dois adaptadores, e `tests/integration/test_golden_constraints.py` prova no PostgreSQL que um documento rotulado não pode ser apagado sozinho, enquanto sua coleção pode.
+
 ## Comportamento exclusivo do PostgreSQL
 
 `tests/integration/test_postgres_fulltext.py` cobre o que o store em memória deliberadamente não imita: stemming e stop words por idioma da coleção (`rates` encontra `rate` em `english`, mas não em `simple`; `banco` encontra `bancos` em `portuguese`). `tests/integration/test_migrations.py` volta para a 0002, insere um chunk, sobe de novo e prova que a migração 0003 o tornou pesquisável.

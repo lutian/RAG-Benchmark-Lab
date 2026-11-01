@@ -124,6 +124,20 @@ flowchart LR
     C --> ANS[Answer + sources + citation validity + timings]
 ```
 
+### Evaluation (implemented)
+
+```mermaid
+flowchart LR
+    D[Documents] -->|seeded passages| G[LLM drafts]
+    M[Manual question + excerpt] --> R
+    G --> R[Human review<br/>approve / reject / edit]
+    R -->|approved| B[BenchmarkService]
+    B -->|chunk sets x methods| S[Recall@k, MRR, latency, CPU]
+    B -->|optional| A[Answers: citations, abstention, judge]
+    S --> P[Run stored + Markdown/JSON report]
+    A --> P
+```
+
 ## The reference layer: why chunking can vary freely
 
 This is the most important design decision in the project. See [ADR-002](decisions.md#adr-002-a-chunking-independent-reference-layer).

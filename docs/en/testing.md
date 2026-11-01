@@ -46,6 +46,10 @@ Everything above the adapter uses `tests/fakes.py::FakeEmbedder`: deterministic 
 
 `tests/unit/adapters/generation/` runs `OpenAICompatibleChatModel` against a local `/v1/chat/completions` stub: messages and model on the wire, `temperature` / `reasoning_effort` sent only when configured, usage present or absent, HTTP errors and unreachable hosts. Above the adapter, `tests/fakes.py::FakeChatModel` returns scripted replies and records prompts.
 
+## Testing the evaluation
+
+Metric functions are tested on hand-computed rankings (`tests/unit/domain/test_evaluation.py`). `BenchmarkService` runs end to end in memory with `ConceptEmbedder`, `FakeReranker` and a `FakeChatModel` that answers and judges, asserting the matrix shape, the warm-up (one extra reranker call per method), and generation/judge rates. The CLI is tested with an in-memory container and a temporary output directory. Golden storage has contract tests on both adapters, and `tests/integration/test_golden_constraints.py` proves on PostgreSQL that a labelled document cannot be deleted alone while its collection can.
+
 ## PostgreSQL-only behaviour
 
 `tests/integration/test_postgres_fulltext.py` covers what the in-memory store deliberately does not imitate: stemming and stop words per collection language (`rates` matches `rate` in `english` but not in `simple`; `banco` matches `bancos` in `portuguese`). `tests/integration/test_migrations.py` downgrades to 0002, inserts a chunk, upgrades again and proves migration 0003 made it searchable.
