@@ -20,6 +20,13 @@ dependencies = [
     "pgvector>=0.3",
 ]
 
+[project.optional-dependencies]
+# Local cross-encoder reranker (RERANKER_PROVIDER=local). Pulls in torch (CPU build on Linux).
+local-rerank = [
+    "sentence-transformers>=3.0",
+    "torch>=2.4",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
@@ -29,6 +36,15 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
 ]
+
+# CPU-only torch wheels on Linux: the CUDA build adds gigabytes the reranker does not need.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]
@@ -60,5 +76,5 @@ packages = ["rag_lab"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["pypdf.*", "streamlit.*"]
+module = ["pypdf.*", "streamlit.*", "sentence_transformers.*"]
 ignore_missing_imports = true

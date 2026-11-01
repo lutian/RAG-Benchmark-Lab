@@ -19,7 +19,10 @@ services:
       retries: 10
 
   api:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_LOCAL_RERANKER: ${INSTALL_LOCAL_RERANKER:-true}
     env_file: .env
     # Apply database migrations, then serve the API.
     command: >
@@ -27,6 +30,9 @@ services:
              uvicorn rag_lab.adapters.inbound.api.app:create_app --factory --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
+    volumes:
+      # The cross-encoder is downloaded on the first reranked search; keep it.
+      - models:/app/data/hf
     depends_on:
       db:
         condition: service_healthy
@@ -37,7 +43,10 @@ services:
       retries: 10
 
   ui:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_LOCAL_RERANKER: ${INSTALL_LOCAL_RERANKER:-true}
     env_file: .env
     command: streamlit run src/rag_lab/ui/app.py --server.address=0.0.0.0 --server.port=8501
     ports:
@@ -56,5 +65,6 @@ services:
       - ollama:/root/.ollama
 
 volumes:
+  models:
   pgdata:
   ollama:
