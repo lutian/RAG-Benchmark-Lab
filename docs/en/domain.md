@@ -132,7 +132,7 @@ A chunk ranked high by **both** methods beats a chunk ranked first by only one. 
 |----------|-----------|
 | `extract_citations(text)` | Unique cited numbers in order of first use. Brackets glued to a word (`list[0]`) or holding non-integers (`[1.5]`, `[a]`) are not citations |
 | `check_citations(text, n)` | `CitationCheck(cited, invalid)`; `valid` means at least one citation **and** every number in `1..n` |
-| `is_abstention(text)` | The answer starts with `NO_ANSWER` (case-insensitive, ignoring markdown wrapping such as `**` or `>`) |
+| `is_abstention(text)` | The answer starts with `NO_ANSWER` (case-insensitive, ignoring leading whitespace and markdown or quote characters: asterisk, underscore, `>`, `#`, backtick, quotes) |
 
 **Why deterministic?** The project target "valid citations ≥ 95%" must be cheap and reproducible. Parsing measures *whether citations point to real sources*; whether the cited source actually supports the sentence is a semantic question left to the optional LLM judge (evaluation phase).
 

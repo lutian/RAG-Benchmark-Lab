@@ -8,8 +8,8 @@ import streamlit as st
 from rag_lab.config import get_settings
 
 INDEXING_TIMEOUT_SECONDS = 1800.0
-# Retrieval + LLM generation (the API retries the provider once on failure).
-GENERATION_TIMEOUT_SECONDS = 600.0
+# Margin for retrieval and reranking on top of the LLM attempts.
+GENERATION_MARGIN_SECONDS = 120.0
 
 
 class ApiError(Exception):
@@ -17,8 +17,11 @@ class ApiError(Exception):
 
 
 class ApiClient:
-    def __init__(self, base_url: str, timeout: float = 120.0) -> None:
+    def __init__(
+        self, base_url: str, timeout: float = 120.0, generation_timeout: float = 600.0
+    ) -> None:
         self._http = httpx.Client(base_url=base_url, timeout=timeout)
+        self._generation_timeout = generation_timeout
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         response = self._http.request(method, path, **kwargs)
@@ -138,15 +141,18 @@ class ApiClient:
             "POST",
             f"/collections/{collection_id}/answer",
             json=body,
-            timeout=GENERATION_TIMEOUT_SECONDS,
+            timeout=self._generation_timeout,
         )
         return result
 
 
 @st.cache_resource
-def _cached_client(base_url: str) -> ApiClient:
-    return ApiClient(base_url)
+def _cached_client(base_url: str, generation_timeout: float) -> ApiClient:
+    return ApiClient(base_url, generation_timeout=generation_timeout)
 
 
 def get_client() -> ApiClient:
-    return _cached_client(get_settings().api_url)
+    settings = get_settings()
+    # The API tries the LLM twice (one retry), each up to LLM_TIMEOUT_SECONDS.
+    generation_timeout = 2 * settings.llm_timeout_seconds + GENERATION_MARGIN_SECONDS
+    return _cached_client(settings.api_url, generation_timeout)

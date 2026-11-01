@@ -121,3 +121,19 @@ def test_explains_why_the_answer_abstained(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert not app.exception
     assert any("Retrieval found no evidence" in w.value for w in app.warning)
+
+
+def test_abstained_text_is_shown_without_citation_badges(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _ = run(
+        monkeypatch,
+        answer(
+            answer="NO_ANSWER: source [9] is about rivers.",
+            abstained=True,
+            abstention_reason="model_abstained",
+            citations=[],
+        ),
+    )
+
+    rendered = " ".join(md.value for md in app.markdown)
+    assert "source [9] is about rivers" in rendered
+    assert '<span class="rl-cite' not in rendered

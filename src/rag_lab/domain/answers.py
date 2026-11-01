@@ -25,9 +25,13 @@ def extract_citations(text: str) -> tuple[int, ...]:
     return tuple(seen)
 
 
+_LEADING_MARKUP = re.compile(r"^[\s*_>#`\"']+")
+
+
 def is_abstention(text: str) -> bool:
-    """The reply starts with the sentinel, ignoring markdown wrapping (``**``, ``>``, ``#``)."""
-    return text.lstrip(" \t\n*_>#`\"'").upper().startswith(ABSTENTION)
+    """The reply starts with the sentinel, ignoring leading whitespace (any Unicode
+    space) and markdown/quote characters: ``* _ > # ` " '``."""
+    return _LEADING_MARKUP.sub("", text).upper().startswith(ABSTENTION)
 
 
 @dataclass(frozen=True, slots=True)

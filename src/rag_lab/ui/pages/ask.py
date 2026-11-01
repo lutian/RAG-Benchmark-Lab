@@ -98,10 +98,14 @@ with answer_column:
     if result["abstained"]:
         st.warning(ABSTENTION_REASONS.get(result["abstention_reason"], "Abstained."))
     if result["answer"]:
-        invalid = set(result["invalid_citations"])
+        # An abstention is not scored for citations: show its text as-is.
+        body = (
+            html.escape(result["answer"])
+            if result["abstained"]
+            else render_answer(result["answer"], set(result["invalid_citations"]))
+        )
         st.markdown(
-            f'<div class="rl-card"><div class="rl-answer">'
-            f"{render_answer(result['answer'], invalid)}</div></div>",
+            f'<div class="rl-card"><div class="rl-answer">{body}</div></div>',
             unsafe_allow_html=True,
         )
     if not result["abstained"]:

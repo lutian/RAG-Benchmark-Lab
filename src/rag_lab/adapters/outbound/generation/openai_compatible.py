@@ -2,6 +2,7 @@
 Ollama, llama.cpp, vLLM, ...), built on LangChain's ``ChatOpenAI``.
 """
 
+import logging
 from collections.abc import Mapping, Sequence
 
 import openai
@@ -14,6 +15,7 @@ from rag_lab.application.ports.generation import ChatMessage, Completion
 
 # The OpenAI SDK refuses an empty key; local servers (Ollama, llama.cpp) ignore it.
 _PLACEHOLDER_KEY = "not-needed"
+_log = logging.getLogger(__name__)
 
 
 class OpenAICompatibleChatModel:
@@ -60,7 +62,9 @@ class OpenAICompatibleChatModel:
             reply = self._client.invoke(converted)
         except (openai.OpenAIError, ValueError, TypeError, KeyError) as error:
             # ValueError/TypeError/KeyError: HTTP 200 with an error object or no choices
-            # (some routers, e.g. OpenRouter, report upstream failures this way).
+            # (some routers, e.g. OpenRouter, report upstream failures this way). The full
+            # error goes to the log, so a local bug is not mistaken for a provider failure.
+            _log.warning("chat completion failed", exc_info=error)
             raise GenerationProviderError(
                 f"chat model {self._model_name!r} at {self._base_url} failed: "
                 f"{type(error).__name__}"
