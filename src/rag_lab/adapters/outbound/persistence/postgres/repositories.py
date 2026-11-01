@@ -489,6 +489,15 @@ class PostgresGoldenQuestionRepository:
         self._connection = connection
 
     def add(self, question: GoldenQuestion) -> None:
+        documents = {e.document_id for e in question.evidence}
+        found = self._connection.scalar(
+            select(func.count()).where(
+                t.documents.c.id.in_(documents),
+                t.documents.c.collection_id == question.collection_id,
+            )
+        )
+        if found != len(documents):
+            raise ConflictError("evidence must point at documents of the question's collection")
         _write(
             self._connection,
             insert(t.golden_questions).values(

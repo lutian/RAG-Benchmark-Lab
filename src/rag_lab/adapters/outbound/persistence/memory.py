@@ -13,6 +13,7 @@ from types import TracebackType
 from typing import Self
 from uuid import UUID
 
+from rag_lab.application.errors import ConflictError
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
@@ -218,10 +219,16 @@ class InMemoryGoldenQuestionRepository:
         self._state = state
 
     def add(self, question: GoldenQuestion) -> None:
+        for evidence in question.evidence:
+            document = self._state.documents.get(evidence.document_id)
+            if document is None or document.collection_id != question.collection_id:
+                raise ConflictError("evidence must point at documents of the question's collection")
         self._state.golden[question.id] = question
 
     def update(self, question: GoldenQuestion) -> None:
-        self._state.golden[question.id] = question
+        # Like an SQL UPDATE: a missing (or other-collection) question is left alone.
+        if self.get(question.collection_id, question.id) is not None:
+            self._state.golden[question.id] = question
 
     def get(self, collection_id: UUID, question_id: UUID) -> GoldenQuestion | None:
         question = self._state.golden.get(question_id)
@@ -259,7 +266,10 @@ class InMemoryBenchmarkRunRepository:
 
     def list(self, collection_id: UUID) -> list[BenchmarkRun]:
         runs = [r for r in self._state.runs.values() if r.collection_id == collection_id]
-        return sorted(runs, key=lambda r: r.created_at, reverse=True)
+        # Newest first, ties by id: the same order as the PostgreSQL adapter.
+        return sorted(
+            sorted(runs, key=lambda r: str(r.id)), key=lambda r: r.created_at, reverse=True
+        )
 
 
 class InMemoryUnitOfWork:

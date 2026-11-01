@@ -174,10 +174,13 @@ golden_evidence = Table(
         primary_key=True,
     ),
     Column("position", Integer, primary_key=True),
+    # No cascade: a labelled document cannot be deleted on its own (the question would
+    # silently lose its evidence). Checked at commit, so deleting the whole collection,
+    # which cascades to questions and documents in either order, still works.
     Column(
         "document_id",
         Uuid,
-        ForeignKey("documents.id", ondelete="CASCADE"),
+        ForeignKey("documents.id", deferrable=True, initially="DEFERRED"),
         nullable=False,
     ),
     Column("start_offset", Integer, nullable=False),

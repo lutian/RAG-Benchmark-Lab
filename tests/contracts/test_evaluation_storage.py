@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from rag_lab.adapters.outbound.parsers.registry import ParserRegistry
+from rag_lab.application.errors import ConflictError
 from rag_lab.application.ports.repositories import UnitOfWork
 from rag_lab.application.services.ingestion import IngestionService
 from rag_lab.domain.chunking import ChunkingConfig, ChunkingStrategy
@@ -119,3 +120,21 @@ def test_benchmark_runs_round_trip_and_list_newest_first(
         assert uow.runs.get(collection_id, older.id) == older
         assert [r.id for r in uow.runs.list(collection_id)] == [newer.id, older.id]
         assert uow.runs.get(uuid4(), older.id) is None
+
+
+def test_evidence_must_belong_to_the_question_collection_and_update_never_inserts(
+    uow_factory: Callable[[], UnitOfWork], ingestion: IngestionService
+) -> None:
+    alpha, _ = seeded(ingestion, "epsilon")
+    _, foreign_document = seeded(ingestion, "zeta")
+    stray = GoldenQuestion.create(
+        alpha, "Q?", (Evidence(foreign_document, Span(0, 5)),), QuestionOrigin.MANUAL
+    )
+
+    with uow_factory() as uow, pytest.raises(ConflictError, match="collection"):
+        uow.golden.add(stray)
+    with uow_factory() as uow:
+        uow.golden.update(stray)
+        uow.commit()
+    with uow_factory() as uow:
+        assert uow.golden.list(alpha) == []

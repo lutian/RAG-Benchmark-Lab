@@ -40,10 +40,12 @@ def upgrade() -> None:
             primary_key=True,
         ),
         sa.Column("position", sa.Integer(), primary_key=True),
+        # No cascade: deleting a labelled document must fail, not empty its question.
+        # Deferred so a collection delete (cascading in any order) passes at commit.
         sa.Column(
             "document_id",
             sa.Uuid(),
-            sa.ForeignKey("documents.id", ondelete="CASCADE"),
+            sa.ForeignKey("documents.id", deferrable=True, initially="DEFERRED"),
             nullable=False,
         ),
         sa.Column("start_offset", sa.Integer(), nullable=False),
