@@ -86,7 +86,10 @@ class GoldenDatasetService:
             reply = self._chat.complete(question_messages(text)).text.strip().strip('"')
             if not reply or reply.upper().startswith(SKIP):
                 continue
-            question = self._new(collection_id, reply, (evidence,), QuestionOrigin.SYNTHETIC)
+            try:
+                question = self._new(collection_id, reply, (evidence,), QuestionOrigin.SYNTHETIC)
+            except InvalidRequestError:
+                continue  # one unusable reply skips its passage, never the whole batch
             with self._uow_factory() as uow:
                 uow.golden.add(question)
                 uow.commit()

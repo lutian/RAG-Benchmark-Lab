@@ -192,3 +192,24 @@ def test_oversized_import_excerpts_reject_the_payload_and_blank_replies_are_skip
         )
     blank = Lab(reply="   ")
     assert blank.service.generate(blank.collection.id, count=2) == []
+
+
+def test_an_invalid_llm_reply_skips_its_passage_and_the_batch_continues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lab = Lab()
+    real_new = GoldenDatasetService._new
+    calls: list[str] = []
+
+    def reject_first(*args: object) -> object:
+        calls.append(str(args[1]))
+        if len(calls) == 1:
+            raise InvalidRequestError("rejected reply")
+        return real_new(*args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(GoldenDatasetService, "_new", staticmethod(reject_first))
+
+    created = lab.service.generate(lab.collection.id, count=3, seed=7)
+
+    assert len(calls) == 3
+    assert len(created) == 2
