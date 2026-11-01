@@ -79,5 +79,5 @@ packages = ["rag_lab"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["pypdf.*", "streamlit.*", "sentence_transformers.*"]
+module = ["pypdf.*", "streamlit.*", "sentence_transformers.*", "pandas.*", "altair.*"]
 ignore_missing_imports = true

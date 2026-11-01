@@ -198,6 +198,35 @@ class ApiClient:
         )
         return result
 
+    # --- benchmarks ---------------------------------------------------------------
+    def benchmark_runs(self, collection_id: str) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = self._request(
+            "GET", f"/collections/{collection_id}/benchmarks"
+        )
+        return result
+
+    def benchmark_run(self, collection_id: str, run_id: str) -> dict[str, Any]:
+        result: dict[str, Any] = self._request(
+            "GET", f"/collections/{collection_id}/benchmarks/{run_id}"
+        )
+        return result
+
+    def benchmark_report(self, collection_id: str, run_id: str) -> str:
+        response = self._http.get(f"/collections/{collection_id}/benchmarks/{run_id}/report")
+        if response.status_code >= 400:
+            raise ApiError(response.json().get("detail", response.text))
+        return response.text
+
+    def run_benchmark(self, collection_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        # Generation runs call the LLM per question x strategy: allow a long wait.
+        result: dict[str, Any] = self._request(
+            "POST",
+            f"/collections/{collection_id}/benchmarks",
+            json=body,
+            timeout=INDEXING_TIMEOUT_SECONDS,
+        )
+        return result
+
 
 @st.cache_resource
 def _cached_client(base_url: str, generation_timeout: float) -> ApiClient:

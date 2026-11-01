@@ -20,6 +20,7 @@ navigation = st.navigation(
         st.Page(PAGES_DIR / "retrieval.py", title="Retrieval"),
         st.Page(PAGES_DIR / "ask.py", title="Ask"),
         st.Page(PAGES_DIR / "golden.py", title="Golden dataset"),
+        st.Page(PAGES_DIR / "benchmark.py", title="Benchmark"),
     ]
 )
 navigation.run()
