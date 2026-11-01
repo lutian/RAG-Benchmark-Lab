@@ -74,3 +74,72 @@ OpenAI's reasoning models reject sampling parameters: *"When reasoning effort is
 LLM and embeddings are configured **independently**: for example, generate with OpenRouter and embed locally with Ollama.
 
 > **Embedding binding:** a collection's vectors are only comparable with vectors from the same model and dimension. Changing `EMBEDDING_MODEL`/`EMBEDDING_DIMENSIONS` requires re-indexing, or a new collection (enforced from phase 2).
+
+## Reranker setup
+
+The fourth strategy, `hybrid_rerank`, reorders the best `RERANK_CANDIDATES` hybrid hits with a cross-encoder: a model that reads the question and each chunk **together** and scores how well the chunk answers it. That is more accurate than comparing two separate embeddings, but too slow to run over the whole collection, which is why it only reranks a short list.
+
+### Option A: local cross-encoder (default)
+
+```dotenv
+RERANKER_PROVIDER=local
+RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+RERANKER_BASE_URL=
+RERANKER_API_KEY=
+```
+
+`RERANKER_BASE_URL` and `RERANKER_API_KEY` are ignored with `local`; leave them empty.
+
+1. **Install the runtime.** Docker: nothing to do, the image installs it (`INSTALL_LOCAL_RERANKER=true` is the default). Local development: `uv sync --extra local-rerank` (sentence-transformers + CPU torch, about 1 GB).
+2. **Get the model.** Nothing to do either: the model is downloaded from Hugging Face on the **first** reranked search and cached. In Docker the cache is the `models` volume (`HF_HOME=/app/data/hf`), so it survives restarts; locally it is `~/.cache/huggingface` (or `$HF_HOME`). To download it ahead of time (for example before a demo or on a machine that will go offline):
+
+   ```bash
+   docker compose exec api python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+   # locally: uv run python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+   ```
+
+3. **Check it.** Run a search with `"method": "hybrid_rerank"` (or the Retrieval page). The first call takes a few seconds (load); the next ones are fast. Each hit shows its hybrid rank before reranking.
+
+Choosing `RERANKER_MODEL` (any Sentence Transformers cross-encoder id from Hugging Face works):
+
+| Model | Download | Languages | When to use it |
+|-------|----------|-----------|----------------|
+| `cross-encoder/ms-marco-MiniLM-L-6-v2` (default) | ~90 MB | English | English corpora; fast on CPU. Used for the sample report |
+| `cross-encoder/ms-marco-MiniLM-L-12-v2` | ~130 MB | English | A bit more accurate, about twice as slow |
+| `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | ~470 MB | Multilingual (incl. Portuguese) | Non-English corpora; still CPU-friendly |
+| `BAAI/bge-reranker-base` | ~1.1 GB | English, Chinese | Higher quality, slower |
+| `BAAI/bge-reranker-v2-m3` | ~2.3 GB | Multilingual | Best quality of this list; slow on CPU, plan for a GPU or the API option |
+
+Match the reranker to the corpus language: an English-only model still ranks Portuguese text, but with much weaker separation between relevant and irrelevant chunks. After changing the model, recreate the API so it reads the new `.env` (`docker compose up -d api`; `docker compose restart` does **not** reload `.env`). The benchmark report records the reranker used (`local: <model>`), so runs with different models stay comparable.
+
+### Option B: a `/rerank` API
+
+```dotenv
+RERANKER_PROVIDER=api
+RERANKER_MODEL=<model name sent to the API>
+RERANKER_BASE_URL=<base URL; the app calls {RERANKER_BASE_URL}/rerank>
+RERANKER_API_KEY=<key, sent as "Authorization: Bearer ..."; empty for none>
+```
+
+The app sends `{model, query, documents, top_n}` and reads `{"results": [{"index", "relevance_score"}]}`, the schema shared by these providers:
+
+| Provider | `RERANKER_BASE_URL` | `RERANKER_MODEL` example | `RERANKER_API_KEY` |
+|----------|---------------------|--------------------------|--------------------|
+| Jina AI | `https://api.jina.ai/v1` | `jina-reranker-v2-base-multilingual` | your key |
+| Cohere | `https://api.cohere.com/v2` | `rerank-v3.5` | your key |
+| vLLM (`vllm serve BAAI/bge-reranker-v2-m3`) | `http://<host>:8000/v1` | `BAAI/bge-reranker-v2-m3` | empty, or the server's key |
+| llama.cpp (`llama-server --reranking -m <reranker>.gguf`) | `http://<host>:8080/v1` | any (the loaded model answers) | empty |
+
+Hugging Face Text Embeddings Inference (TEI) is **not** compatible: its `/rerank` expects `texts` instead of `documents`.
+
+With the API option you do not need torch in the image: build with `INSTALL_LOCAL_RERANKER=false docker compose up --build` for a much smaller image. From a container, reach a server on your machine with `http://host.docker.internal:<port>/v1` (Docker Desktop; on Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the `api` service).
+
+### When it fails
+
+A reranked search that cannot rerank returns **HTTP 502** with the reason (the other three methods keep working):
+
+| Message | Fix |
+|---------|-----|
+| `cannot load cross-encoder ... Install the 'local-rerank' extra or set RERANKER_PROVIDER=api` | Run `uv sync --extra local-rerank`, or rebuild the image with `INSTALL_LOCAL_RERANKER=true`; also check the model id and that Hugging Face is reachable on first use |
+| `RERANKER_BASE_URL is required when RERANKER_PROVIDER=api` | Set the base URL |
+| `reranker at ... returned HTTP 401` (or 4xx/5xx) | Check the key, the model name and the URL (it must not already end in `/rerank`) |
