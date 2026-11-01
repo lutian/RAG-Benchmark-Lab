@@ -20,6 +20,7 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 | [012](#adr-012-uma-tabela-de-vetores-sem-dimensão-fixa) | Uma tabela de vetores sem dimensão fixa | Aceita |
 | [013](#adr-013-full-text-do-postgresql-como-base-lexical) | Full-text do PostgreSQL (consulta com OU, `ts_rank_cd`) como método lexical | Aceita |
 | [014](#adr-014-busca-vetorial-exata-para-o-benchmark) | Busca vetorial exata, sem índice ANN | Aceita |
+| [015](#adr-015-citações-numeradas-verificadas-por-parsing-e-sentinela-de-abstenção) | Citações numeradas verificadas por parsing e sentinela de abstenção | Aceita |
 
 ---
 
@@ -161,3 +162,16 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 |-------------|-------------|
 | HNSW por coleção (como planejado originalmente) | DDL dinâmico por coleção e dimensão; resultados aproximados contaminam a comparação; consultas filtradas podem retornar menos que `top_k` |
 | IVFFlat | Precisa de dados de treino antes de ser criado e tem o mesmo problema de aproximação |
+
+## ADR-015: Citações numeradas verificadas por parsing e sentinela de abstenção
+
+**Decisão:** os chunks recuperados chegam ao LLM como fontes numeradas. A resposta precisa citá-las como `[n]`; as citações são extraídas com uma expressão regular e são válidas quando existe ao menos uma e todas apontam para uma fonte fornecida. Quando as fontes não bastam, o modelo responde `NO_ANSWER …`. Sem nenhum chunk recuperado, o LLM não é chamado.
+
+**Por quê:** funciona com qualquer provedor compatível com OpenAI (não exige saída estruturada), a métrica de citações é gratuita e reproduzível, e os dois caminhos de abstenção separam falhas de recuperação de decisões da geração, que é exatamente o diagnóstico para o qual o laboratório existe.
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| Saída JSON / estruturada com ids das fontes | Nem todo servidor compatível suporta; uma falha de parsing perderia a resposta inteira |
+| Correspondência de citações literais (a resposta precisa citar o trecho) | Penaliza paráfrases corretas; frágil com os espaços em branco de PDFs |
+| Juiz LLM em toda resposta | Custa uma segunda chamada por pergunta; fica como etapa opcional da avaliação, não como métrica base |
+| Limiar de score para abstenção | Os scores não são calibrados entre modelos e corpora |

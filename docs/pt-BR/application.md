@@ -10,9 +10,12 @@ A camada de aplicação contém os **casos de uso** (o que o sistema sabe fazer)
 |--------|-----------|
 | `services/ingestion.py` | `IngestionService`: coleções, ingestão de documentos, chunk sets |
 | `services/indexing.py` | `IndexingService`: embeddings dos chunk sets, vínculo, progresso |
+| `services/answering.py` | `AnswerService`: recuperação → contexto numerado → LLM → citações verificadas ou abstenção |
+| `prompts.py` | O prompt de resposta fundamentada (regras, fontes numeradas) |
 | `services/retrieval.py` | `RetrievalService`: busca vetorial, full-text, híbrida e híbrida com reranking, com filtros e tempos |
 | `ports/parsing.py` | Port `DocumentParser` e sua saída `ParsedDocument` |
 | `ports/embeddings.py` | Ports `Embedder` (o modelo) e `EmbeddingRepository` (o armazenamento de vetores) |
+| `ports/generation.py` | Port `ChatModel`, `ChatMessage`, `Completion` |
 | `ports/reranking.py` | `Reranker`: pontua pares (pergunta, texto) |
 | `ports/search.py` | `SearchRepository`: buscas vetoriais e full-text ordenadas sobre um chunk set |
 | `ports/repositories.py` | Ports de repositório e a fronteira transacional `UnitOfWork` |
@@ -67,7 +70,29 @@ Pontos de design:
 - **Os vetores da pergunta são validados** contra a dimensão do embedder; um tamanho errado é `EmbeddingProviderError` (502), nunca um erro do banco.
 - **Resultados explicáveis.** Cada resultado traz `ranks`, por exemplo `{"vector": 9, "fulltext": 1}` para um chunk que só o método lexical encontrou perto do topo.
 
+## `AnswerService`
+
+| Caso de uso | Comportamento |
+|-------------|---------------|
+| `answer(id, key, question, method=hybrid, top_k=5, document_ids=None)` | Recupera com o `RetrievalService`, numera os resultados como fontes, chama o `ChatModel` e depois faz o parsing e a checagem das citações. Retorna um `Answer`: texto, `abstained` + `abstention_reason`, fontes, citações válidas (número → resultado), `CitationCheck`, modelo, uso de tokens e tempos (etapas da recuperação + `generation_ms`) |
+
+Pontos de design:
+
+- **Dois motivos de abstenção, dois culpados.** `no_evidence_retrieved`: a recuperação não retornou nada, então o LLM **não é chamado** (sem custo e sem chance de alucinar). `model_abstained`: havia fontes, mas o modelo respondeu `NO_ANSWER`. Ao diagnosticar uma resposta ruim, o primeiro aponta para a recuperação; o segundo, para a *qualidade* da recuperação ou para a geração.
+- **Todas as fontes são retornadas**, citadas ou não, para você ver se o chunk certo foi recuperado e ignorado (problema de geração) ou nunca recuperado (problema de recuperação).
+- **O prompt fica em `application/prompts.py`**: um único lugar versionado, com testes unitários para as suas regras (fontes numeradas, sentinela, resposta no idioma da pergunta). As fontes são rotuladas com página e seção para o modelo conseguir distingui-las.
+- **Sem limiar de score.** Os scores vetoriais e de RRF não são calibrados entre corpora e modelos, então um corte fixo faria o sistema se abster arbitrariamente. O modelo decide pelo conteúdo; o benchmark mede com que frequência ele acerta ao fazer isso.
+
 ## Ports
+
+### `ChatModel`
+
+```python
+name: str
+def complete(self, messages: Sequence[ChatMessage]) -> Completion  # texto, modelo, tokens de prompt/completion
+```
+
+As implementações lançam `GenerationProviderError`. As contagens de tokens são `None` quando o provedor não informa o uso.
 
 ### `Reranker`
 
@@ -126,6 +151,7 @@ As implementações encapsulam as falhas do provedor em `EmbeddingProviderError`
 | `ConflictError` | Nome de coleção ou chunk set duplicado; coleção vinculada a outro modelo de embeddings; busca vetorial/híbrida em um chunk set que não está totalmente indexado | 409 |
 | `InvalidRequestError` | Valores que não podem ser usados: `hybrid_rerank` sem reranker, pergunta vazia, `top_k` fora do intervalo, idioma de full-text desconhecido, nome de coleção em branco | 422 |
 | `EmbeddingProviderError` | A API de embeddings falhou, estava inacessível ou retornou vetores do tamanho errado | 502 |
+| `GenerationProviderError` | O LLM de chat falhou, estourou o timeout ou estava inacessível (o corpo da resposta não é repassado) | 502 |
 | `RerankerError` | O reranker não carregou (falta o extra `local-rerank`), a API dele falhou ou retornou scores malformados | 502 |
 | `UploadTooLargeError` | Arquivo maior que `MAX_UPLOAD_MB` | 413 |
 | `UnsupportedDocumentError` | A extensão não é `.pdf`, `.md`, `.markdown` ou `.txt` | 415 |

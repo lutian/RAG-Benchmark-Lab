@@ -10,9 +10,12 @@ The application layer holds the **use cases** (what the system can do) and the *
 |--------|---------|
 | `services/ingestion.py` | `IngestionService`: collections, document ingestion, chunk sets |
 | `services/indexing.py` | `IndexingService`: embed chunk sets, binding, progress |
+| `services/answering.py` | `AnswerService`: retrieval → numbered context → LLM → checked citations or abstention |
+| `prompts.py` | The grounded-answer prompt (rules, numbered sources) |
 | `services/retrieval.py` | `RetrievalService`: vector, full-text, hybrid and reranked hybrid search with filters and timings |
 | `ports/parsing.py` | `DocumentParser` port and its output `ParsedDocument` |
 | `ports/embeddings.py` | `Embedder` (the model) and `EmbeddingRepository` (the vector store) ports |
+| `ports/generation.py` | `ChatModel` port, `ChatMessage`, `Completion` |
 | `ports/reranking.py` | `Reranker`: scores (question, text) pairs |
 | `ports/search.py` | `SearchRepository`: ranked vector and full-text lookups over one chunk set |
 | `ports/repositories.py` | Repository ports and the `UnitOfWork` transaction boundary |
@@ -67,7 +70,29 @@ Design points:
 - **Query vectors are validated** against the embedder's dimension; a wrong length is an `EmbeddingProviderError` (502), never a database error.
 - **Explainable hits.** Every hit carries `ranks`, e.g. `{"vector": 9, "fulltext": 1}` for a chunk that only the lexical method found near the top.
 
+## `AnswerService`
+
+| Use case | Behaviour |
+|----------|-----------|
+| `answer(id, key, question, method=hybrid, top_k=5, document_ids=None)` | Retrieves with `RetrievalService`, numbers the hits as sources, asks the `ChatModel`, then parses and checks the citations. Returns an `Answer`: text, `abstained` + `abstention_reason`, sources, valid citations (number → hit), `CitationCheck`, model, token usage and timings (retrieval stages + `generation_ms`) |
+
+Design points:
+
+- **Two abstention reasons, two culprits.** `no_evidence_retrieved`: retrieval returned nothing, so the LLM is **not called** (no cost, no chance to hallucinate). `model_abstained`: sources existed but the model said `NO_ANSWER`. When diagnosing a bad answer, the first points at retrieval, the second at retrieval *quality* or generation.
+- **Every source is returned**, cited or not, so you can see whether the right chunk was retrieved but ignored (generation problem) or never retrieved (retrieval problem).
+- **The prompt lives in `application/prompts.py`**: one versioned place, unit-tested for its rules (numbered sources, sentinel, answer in the question's language). Sources are labelled with page and section so the model can tell them apart.
+- **No score threshold.** Vector and RRF scores are not calibrated across corpora and models, so a fixed cut-off would abstain arbitrarily. The model decides from the content; the benchmark measures how often it is right to.
+
 ## Ports
+
+### `ChatModel`
+
+```python
+name: str
+def complete(self, messages: Sequence[ChatMessage]) -> Completion  # text, model, prompt/completion tokens
+```
+
+Implementations raise `GenerationProviderError`. Token counts are `None` when the provider does not report usage.
 
 ### `Reranker`
 
@@ -126,6 +151,7 @@ Implementations wrap provider failures in `EmbeddingProviderError`. `embed_query
 | `ConflictError` | Duplicate collection name or chunk set; collection bound to another embedding model; vector/hybrid search on a chunk set that is not fully indexed | 409 |
 | `InvalidRequestError` | Values that cannot be used: `hybrid_rerank` without a reranker, blank query, `top_k` out of range, unknown full-text language, blank collection name | 422 |
 | `EmbeddingProviderError` | Embeddings API failed, was unreachable, or returned vectors of the wrong size | 502 |
+| `GenerationProviderError` | Chat LLM failed, timed out or was unreachable (the upstream body is not echoed) | 502 |
 | `RerankerError` | Reranker could not load (missing `local-rerank` extra), its API failed, or it returned malformed scores | 502 |
 | `UploadTooLargeError` | File exceeds `MAX_UPLOAD_MB` | 413 |
 | `UnsupportedDocumentError` | Extension is not `.pdf`, `.md`, `.markdown`, `.txt` | 415 |

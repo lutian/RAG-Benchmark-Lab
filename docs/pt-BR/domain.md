@@ -12,6 +12,7 @@ O domínio é o vocabulário do laboratório: **spans, documentos, chunks, cole�
 | `documents.py` | Um documento processado e sua estrutura | `Document`, `StructuralElement`, `ElementKind`, `MediaType` |
 | `chunks.py` | Unidade recuperável derivada de um documento | `Chunk` |
 | `collections.py` | Fronteira de isolamento, chunk sets a construir, vínculo de embeddings | `Collection`, `EmbeddingMismatchError` |
+| `answers.py` | Parsing de citações, validade das citações, sentinela de abstenção | `extract_citations()`, `check_citations()`, `CitationCheck`, `ABSTENTION` |
 | `retrieval.py` | Métodos de busca, resultados com score e fusão de rankings | `SearchMethod`, `ScoredChunk`, `reciprocal_rank_fusion()` |
 | `embeddings.py` | Qual modelo gerou um vetor e seu tamanho | `EmbeddingSpec` |
 | `chunking/config.py` | Como fazer o chunking | `ChunkingConfig`, `ChunkingStrategy` |
@@ -122,3 +123,17 @@ Um chunk bem posicionado pelos **dois** métodos vence um chunk que ficou em pri
 | **RRF (escolhida)** | Usa só as posições, então não precisa de calibração; um único parâmetro (`k`, padrão 60 como no artigo original, `HYBRID_RRF_K`) |
 
 **Por que no domínio?** A fusão é aritmética pura sobre rankings. Mantê-la fora do SQL a torna idêntica para todos os adaptadores de armazenamento e testável em milissegundos.
+
+## Respostas — citações e abstenção
+
+**O que é:** as regras que tornam uma resposta *verificável*. As fontes são numeradas `1..n` no prompt; a resposta as cita como `[n]` ou `[n, m]`; quando as fontes não bastam, o modelo responde com a sentinela `NO_ANSWER`.
+
+| Função | Comportamento |
+|--------|---------------|
+| `extract_citations(text)` | Números citados, sem repetição, na ordem do primeiro uso. Colchetes colados a uma palavra (`list[0]`) ou com não inteiros (`[1.5]`, `[a]`) não são citações |
+| `check_citations(text, n)` | `CitationCheck(cited, invalid)`; `valid` significa ao menos uma citação **e** todos os números em `1..n` |
+| `is_abstention(text)` | A resposta começa com `NO_ANSWER` (sem diferenciar maiúsculas) |
+
+**Por que determinístico?** A meta do projeto "citações válidas ≥ 95%" precisa ser barata e reproduzível. O parsing mede *se as citações apontam para fontes reais*; se a fonte citada de fato sustenta a frase é uma questão semântica, deixada para o juiz LLM opcional (fase de avaliação).
+
+**Por que uma sentinela em vez de saída JSON?** Saída estruturada (`response_format`) não é implementada por todos os servidores compatíveis com OpenAI (llama.cpp, Ollama mais antigo, algumas rotas do OpenRouter). Uma primeira palavra fixa funciona em qualquer um e é trivial de detectar.

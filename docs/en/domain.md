@@ -13,6 +13,7 @@ The domain is the vocabulary of the lab: **spans, documents, chunks, collections
 | `chunks.py` | A retrievable unit derived from a document | `Chunk` |
 | `collections.py` | Isolation boundary, chunk sets to build, embedding binding | `Collection`, `EmbeddingMismatchError` |
 | `embeddings.py` | Which model produced a vector and its length | `EmbeddingSpec` |
+| `answers.py` | Citation parsing, citation validity, abstention sentinel | `extract_citations()`, `check_citations()`, `CitationCheck`, `ABSTENTION` |
 | `retrieval.py` | Search methods, scored hits and rank fusion | `SearchMethod`, `ScoredChunk`, `reciprocal_rank_fusion()` |
 | `chunking/config.py` | How to chunk | `ChunkingConfig`, `ChunkingStrategy` |
 | `chunking/strategies.py` | The chunking algorithms | `chunk_document()` |
@@ -122,3 +123,17 @@ A chunk ranked high by **both** methods beats a chunk ranked first by only one. 
 | **RRF (chosen)** | Uses ranks only, so no calibration; one parameter (`k`, default 60 as in the original paper, `HYBRID_RRF_K`) |
 
 **Why in the domain?** Fusion is pure arithmetic over rankings. Keeping it out of SQL makes it identical for every storage adapter and testable in milliseconds.
+
+## Answers — citations and abstention
+
+**What it is:** the rules that make an answer *checkable*. Sources are numbered `1..n` in the prompt; the answer cites them as `[n]` or `[n, m]`; when the sources are insufficient the model replies with the sentinel `NO_ANSWER`.
+
+| Function | Behaviour |
+|----------|-----------|
+| `extract_citations(text)` | Unique cited numbers in order of first use. Brackets glued to a word (`list[0]`) or holding non-integers (`[1.5]`, `[a]`) are not citations |
+| `check_citations(text, n)` | `CitationCheck(cited, invalid)`; `valid` means at least one citation **and** every number in `1..n` |
+| `is_abstention(text)` | The answer starts with `NO_ANSWER` (case-insensitive) |
+
+**Why deterministic?** The project target "valid citations ≥ 95%" must be cheap and reproducible. Parsing measures *whether citations point to real sources*; whether the cited source actually supports the sentence is a semantic question left to the optional LLM judge (evaluation phase).
+
+**Why a sentinel instead of JSON output?** Structured output (`response_format`) is not implemented by every OpenAI-compatible server (llama.cpp, older Ollama, some OpenRouter routes). A fixed first word works everywhere and is trivial to detect.

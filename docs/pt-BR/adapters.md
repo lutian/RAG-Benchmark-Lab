@@ -9,6 +9,7 @@ Os adaptadores são o único código que toca arquivos, bancos de dados, HTTP e 
 | Parsers | Saída | `DocumentParser` | pypdf, Markdown via regex |
 | Persistência PostgreSQL | Saída | `UnitOfWork` + repositórios | SQLAlchemy Core 2, psycopg 3, Alembic |
 | Persistência em memória | Saída | `UnitOfWork` + repositórios | Dicionários simples |
+| Modelo de chat | Saída | `ChatModel` | `ChatOpenAI` do LangChain → qualquer API `/chat/completions` compatível com OpenAI |
 | Reranking | Saída | `Reranker` | Cross-encoder do Sentence Transformers, ou `httpx` → qualquer API `/rerank` |
 | Embeddings | Saída | `Embedder` | `OpenAIEmbeddings` do LangChain → qualquer API compatível com OpenAI |
 | API HTTP | Entrada | `IngestionService` | FastAPI, Pydantic v2 |
@@ -45,6 +46,19 @@ Os adaptadores são o único código que toca arquivos, bancos de dados, HTTP e 
 Todo `openai.OpenAIError` (erro HTTP, timeout, conexão recusada) vira `EmbeddingProviderError`, com a URL e o modelo na mensagem → HTTP 502.
 
 **Por que LangChain aqui e não o SDK `openai` direto?** A stack do projeto inclui o LangChain, e o valor dele está na borda dos provedores: uma interface (`Embeddings`) sobre muitos provedores, que as próximas fases reutilizam para os modelos de chat. Ele fica restrito a este adaptador; o resto do código só enxerga o port `Embedder`.
+
+## Modelo de chat — `adapters/outbound/generation/`
+
+`OpenAICompatibleChatModel` chama `POST {LLM_BASE_URL}/chat/completions` pelo `ChatOpenAI` do LangChain.
+
+| Parâmetro | Valor | Por quê |
+|-----------|-------|---------|
+| `use_responses_api` | `False` | A Responses API existe só na OpenAI; Chat Completions é o que todo servidor compatível implementa |
+| `temperature` / `reasoning_effort` | só quando definidos no `.env` | Modelos de raciocínio rejeitam `temperature` (veja [configuração](configuration.md#temperatura-vs-reasoning-effort)); nada é enviado por padrão |
+| `max_retries` / `timeout` | `2` / `LLM_TIMEOUT_SECONDS` | Erros transitórios são repetidos pelo SDK |
+| API key vazia | trocada por um placeholder | O SDK recusa chaves vazias; servidores locais ignoram o valor |
+
+Todo `openai.OpenAIError` vira `GenerationProviderError` com o modelo e a URL (sem o corpo da resposta) → HTTP 502. O uso de tokens vem do campo `usage` da resposta quando o provedor o envia.
 
 ## Reranking — `adapters/outbound/reranking/`
 
@@ -126,6 +140,7 @@ O mesmo contrato sobre dicionários, com rollback real (cada transação trabalh
 | `GET` | `/collections/{id}/chunk-sets/{key}/chunks?document_id=` | Chunks com spans, páginas e caminhos de títulos |
 | `POST` | `/collections/{id}/chunk-sets/{key}/index?rebuild=false` | Gera os embeddings dos chunks pendentes; retorna total / já indexados / gerados / segundos |
 | `GET` | `/collections/{id}/index` | Vínculo de embeddings e `embedded / total` por chunk set |
+| `POST` | `/collections/{id}/answer` | Corpo `{question, chunk_set, method, top_k, document_ids}`; retorna a resposta, `abstained` + `abstention_reason`, `citations` (número → fonte), `citations_valid`, `invalid_citations`, todas as `sources`, modelo, uso de tokens e tempos |
 | `POST` | `/collections/{id}/search` | Corpo `{query, chunk_set, method: vector\|fulltext\|hybrid\|hybrid_rerank, top_k, document_ids}`; retorna resultados ordenados com spans, score, `ranks` por etapa e tempos |
 
 A documentação interativa fica em `http://localhost:8000/docs` (OpenAPI).
@@ -147,6 +162,7 @@ A documentação interativa fica em `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Ponto de entrada e navegação |
 | `pages/home.py` | Visão geral dos dois pipelines |
 | `pages/ingestion.py` | Coleções (barra lateral), uploads, lista de documentos, **inspetor de chunks**, progresso da indexação e a ação **Index chunk set** (com rebuild opcional) |
+| `pages/ask.py` | **Respostas fundamentadas** em três painéis: escopo e estratégia (barra lateral), a resposta com as citações em destaque (fontes desconhecidas sinalizadas) e o motivo da abstenção, e todas as fontes, com as citadas marcadas |
 | `pages/retrieval.py` | **Comparação de métodos**: uma pergunta, quatro colunas (vetorial, full-text, híbrida, híbrida + rerank; uma chave desliga o reranking), cada resultado com score, posição por etapa (inclusive a posição na híbrida antes do reranking), localização e termos da pergunta destacados; filtro por documento e `top_k` na barra lateral |
 | `highlight.py` | Funções puras que desenham os spans dos chunks com destaques alternados (sobreposições ganham uma cor própria) e marcam os termos da pergunta como evidência |
 | `api_client.py` | Cliente `httpx` tipado para a API |

@@ -20,6 +20,7 @@ Each record states the decision first, then the alternatives that were rejected 
 | [012](#adr-012-one-vector-table-without-a-fixed-dimension) | One vector table without a fixed dimension | Accepted |
 | [013](#adr-013-postgresql-full-text-as-the-lexical-baseline) | PostgreSQL full-text (OR query, `ts_rank_cd`) as the lexical method | Accepted |
 | [014](#adr-014-exact-vector-search-for-the-benchmark) | Exact vector search, no ANN index | Accepted |
+| [015](#adr-015-numbered-citations-checked-by-parsing-and-a-sentinel-for-abstention) | Numbered citations checked by parsing, and a sentinel for abstention | Accepted |
 
 ---
 
@@ -161,3 +162,16 @@ Each record states the decision first, then the alternatives that were rejected 
 |-------------|---------|
 | HNSW per collection (as originally planned) | Dynamic DDL per collection and dimension; approximate results contaminate the comparison; filtered queries can return fewer than `top_k` |
 | IVFFlat | Needs training data before creation and has the same approximation problem |
+
+## ADR-015: Numbered citations checked by parsing, and a sentinel for abstention
+
+**Decision:** retrieved chunks are given to the LLM as numbered sources. The answer must cite them as `[n]`; citations are extracted with a regular expression and are valid when at least one exists and all point to a provided source. When the sources are insufficient the model answers `NO_ANSWER …`. With no retrieved chunk the LLM is not called.
+
+**Why:** it works with every OpenAI-compatible provider (no structured-output support needed), the citation metric is free and reproducible, and the two abstention paths separate retrieval failures from generation decisions, which is the diagnosis the lab exists for.
+
+| Alternative | Why not |
+|-------------|---------|
+| JSON / structured output with source ids | Not supported by every compatible server; a parse failure would lose the whole answer |
+| Quote matching (answer must quote the source) | Penalises correct paraphrases; brittle with PDF whitespace |
+| LLM judge for every answer | Costs a second call per question; kept as an optional evaluation step, not the baseline metric |
+| Score threshold for abstention | Scores are not calibrated across models and corpora |

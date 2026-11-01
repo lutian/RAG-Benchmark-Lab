@@ -9,6 +9,7 @@ Adapters are the only code that touches files, databases, HTTP and frameworks. *
 | Parsers | Outbound | `DocumentParser` | pypdf, regex-based Markdown |
 | PostgreSQL persistence | Outbound | `UnitOfWork` + repositories | SQLAlchemy Core 2, psycopg 3, Alembic |
 | In-memory persistence | Outbound | `UnitOfWork` + repositories | Plain dicts |
+| Chat model | Outbound | `ChatModel` | LangChain `ChatOpenAI` → any OpenAI-compatible `/chat/completions` API |
 | Reranking | Outbound | `Reranker` | Sentence Transformers cross-encoder, or `httpx` → any `/rerank` API |
 | Embeddings | Outbound | `Embedder` | LangChain `OpenAIEmbeddings` → any OpenAI-compatible API |
 | HTTP API | Inbound | `IngestionService` | FastAPI, Pydantic v2 |
@@ -45,6 +46,19 @@ Adapters are the only code that touches files, databases, HTTP and frameworks. *
 Every `openai.OpenAIError` (HTTP error, timeout, connection refused) becomes `EmbeddingProviderError`, with the URL and model in the message → HTTP 502.
 
 **Why LangChain here and not the raw `openai` SDK?** The project stack names LangChain, and its value is at the provider edge: one interface (`Embeddings`) over many providers, which later phases reuse for chat models. It stays inside this adapter; the rest of the code only sees the `Embedder` port.
+
+## Chat model — `adapters/outbound/generation/`
+
+`OpenAICompatibleChatModel` calls `POST {LLM_BASE_URL}/chat/completions` through LangChain's `ChatOpenAI`.
+
+| Parameter | Value | Why |
+|-----------|-------|-----|
+| `use_responses_api` | `False` | The OpenAI Responses API exists only at OpenAI; Chat Completions is what every compatible server implements |
+| `temperature` / `reasoning_effort` | only when set in `.env` | Reasoning models reject `temperature` (see [configuration](configuration.md#temperature-vs-reasoning-effort)); nothing is sent by default |
+| `max_retries` / `timeout` | `2` / `LLM_TIMEOUT_SECONDS` | Transient errors are retried by the SDK |
+| empty API key | replaced by a placeholder | The SDK refuses empty keys; local servers ignore the value |
+
+Every `openai.OpenAIError` becomes `GenerationProviderError` with the model and URL (not the upstream body) → HTTP 502. Token usage comes from the response `usage` when the provider sends it.
 
 ## Reranking — `adapters/outbound/reranking/`
 
@@ -126,6 +140,7 @@ The same contract backed by dictionaries, with real rollback (each transaction w
 | `GET` | `/collections/{id}/chunk-sets/{key}/chunks?document_id=` | Chunks with spans, pages and heading paths |
 | `POST` | `/collections/{id}/chunk-sets/{key}/index?rebuild=false` | Embed pending chunks; returns total / already indexed / embedded / seconds |
 | `GET` | `/collections/{id}/index` | Embedding binding and `embedded / total` per chunk set |
+| `POST` | `/collections/{id}/answer` | Body `{question, chunk_set, method, top_k, document_ids}`; returns the answer, `abstained` + `abstention_reason`, `citations` (number → source), `citations_valid`, `invalid_citations`, every `source`, model, token usage and timings |
 | `POST` | `/collections/{id}/search` | Body `{query, chunk_set, method: vector\|fulltext\|hybrid\|hybrid_rerank, top_k, document_ids}`; returns ranked hits with spans, score, `ranks` per stage and timings |
 
 Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).
@@ -147,6 +162,7 @@ Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Entry point and navigation |
 | `pages/home.py` | Overview of both pipelines |
 | `pages/ingestion.py` | Collections (sidebar), uploads, document list, **chunk inspector**, indexing progress and the **Index chunk set** action (with optional rebuild) |
+| `pages/ask.py` | **Grounded answers** in three panels: scope and strategy (sidebar), the answer with citation badges (unknown sources flagged) and the abstention reason, and every source with the cited ones marked |
 | `pages/retrieval.py` | **Method comparison**: one question, four columns (vector, full-text, hybrid, hybrid + rerank; a toggle skips reranking), each hit with score, rank per stage (including its hybrid rank before reranking), location and highlighted query terms; document filter and `top_k` in the sidebar |
 | `highlight.py` | Pure functions rendering chunk spans as alternating highlights (overlaps get their own colour) and marking query terms as evidence |
 | `api_client.py` | Typed `httpx` client for the API |

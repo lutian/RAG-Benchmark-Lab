@@ -111,9 +111,18 @@ sequenceDiagram
     R-->>C: resultados + posição por método + tempos
 ```
 
-### Perguntas e respostas (planejado, fase 5)
+### Perguntas e respostas (implementado)
 
-`Pergunta → estratégia de recuperação (vetorial / full-text / híbrida) → filtros → reranking → contexto → LLM → resposta com citações`, ou abstenção quando a evidência é insuficiente.
+```mermaid
+flowchart LR
+    Q[Pergunta] --> R[RetrievalService<br/>método + filtros + rerank]
+    R -->|sem resultados| A1[Abstenção: no_evidence_retrieved]
+    R -->|resultados| P[Fontes numeradas<br/>prompts.py]
+    P --> L[ChatModel]
+    L -->|NO_ANSWER| A2[Abstenção: model_abstained]
+    L -->|texto com citações n| C[check_citations]
+    C --> ANS[Resposta + fontes + validade das citações + tempos]
+```
 
 ## A camada de referência: por que o chunking pode variar livremente
 

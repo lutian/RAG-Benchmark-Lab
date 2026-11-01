@@ -111,9 +111,18 @@ sequenceDiagram
     R-->>C: hits + rank per method + timings
 ```
 
-### Question answering (planned, phase 5)
+### Question answering (implemented)
 
-`Question → retrieval strategy (vector / full-text / hybrid) → filters → reranking → context → LLM → answer with citations`, or abstention when the evidence is insufficient.
+```mermaid
+flowchart LR
+    Q[Question] --> R[RetrievalService<br/>method + filters + rerank]
+    R -->|no hits| A1[Abstain: no_evidence_retrieved]
+    R -->|hits| P[Numbered sources<br/>prompts.py]
+    P --> L[ChatModel]
+    L -->|NO_ANSWER| A2[Abstain: model_abstained]
+    L -->|text with n citations| C[check_citations]
+    C --> ANS[Answer + sources + citation validity + timings]
+```
 
 ## The reference layer: why chunking can vary freely
 

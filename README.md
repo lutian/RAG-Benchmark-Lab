@@ -14,8 +14,8 @@ This is not a chatbot that reads PDFs. You upload any corpus. The lab chunks it 
 | 2. Indexing | Embeddings from any OpenAI-compatible API, persisted in pgvector; resumable, model-bound collections | ✅ Done |
 | 3. Retrieval | Exact vector search, PostgreSQL full-text (per-collection language) and hybrid RRF; filters, per-stage latency, rank per method | ✅ Done |
 | 4. Reranking | Hybrid + rerank as the fourth strategy: local cross-encoder (Sentence Transformers) or any `/rerank` API; rank before/after reranking | ✅ Done |
-| 5. Generation | Grounded answers with citations and abstention | ⏳ Next |
-| 6. Evaluation | Golden dataset, Recall@k, MRR, citation validity | Planned |
+| 5. Generation | Grounded answers from any OpenAI-compatible LLM: numbered citations checked by parsing, two abstention paths (no evidence / model) | ✅ Done |
+| 6. Evaluation | Golden dataset, Recall@k, MRR, citation validity | ⏳ Next |
 | 7. Presentation | Comparative dashboard | Planned |
 
 ## Quick start (Docker)
@@ -35,7 +35,7 @@ docker compose up --build -d
 | API (FastAPI) | http://localhost:8000 · interactive docs at http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (loopback only) |
 
-Then open the UI, create a collection in the sidebar, upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set. Press **Index chunk set** to embed it with the provider configured in `.env`. On the **Retrieval** page, ask a question and compare vector, full-text, hybrid and reranked results side by side. The first reranked search downloads the cross-encoder (~90 MB) into the `models` volume.
+Then open the UI, create a collection in the sidebar, upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set. Press **Index chunk set** to embed it with the provider configured in `.env`. On the **Retrieval** page, ask a question and compare vector, full-text, hybrid and reranked results side by side. The first reranked search downloads the cross-encoder (~90 MB) into the `models` volume. On the **Ask** page, get an answer with citations next to the sources it was given.
 
 Optional local models with Ollama:
 
@@ -68,6 +68,10 @@ curl -s localhost:8000/collections/<collection_id>/index
 # 5. Search (method: vector | fulltext | hybrid | hybrid_rerank)
 curl -s -X POST localhost:8000/collections/<collection_id>/search -H 'content-type: application/json' \
      -d '{"query": "What is the refund policy?", "chunk_set": "structure-800-120", "method": "hybrid_rerank", "top_k": 5}'
+
+# 6. Answer with citations (uses LLM_* from .env)
+curl -s -X POST localhost:8000/collections/<collection_id>/answer -H 'content-type: application/json' \
+     -d '{"question": "What is the refund policy?", "chunk_set": "structure-800-120", "method": "hybrid"}'
 ```
 
 ## Local development (without Docker for the app)

@@ -42,6 +42,10 @@ Tudo acima do adaptador usa `tests/fakes.py::FakeEmbedder`: vetores determiníst
 
 `tests/unit/adapters/reranking/` roda o `HttpReranker` contra um stub `/rerank` local real (corpo da requisição, header de autenticação, scores devolvidos fora de ordem, listas no estilo TEI, erros HTTP, índices faltando, host inacessível) e o `CrossEncoderReranker` com um modelo falso injetado (carregamento preguiçoso, uma única carga, biblioteca ausente). Os testes nunca baixam um modelo; acima do adaptador, quem atua é o `tests/fakes.py::FakeReranker`.
 
+## Testando o modelo de chat
+
+`tests/unit/adapters/generation/` roda o `OpenAICompatibleChatModel` contra um stub local de `/v1/chat/completions`: mensagens e modelo na requisição, `temperature` / `reasoning_effort` enviados só quando configurados, uso de tokens presente ou ausente, erros HTTP e hosts inacessíveis. Acima do adaptador, o `tests/fakes.py::FakeChatModel` devolve respostas roteirizadas e registra os prompts.
+
 ## Comportamento exclusivo do PostgreSQL
 
 `tests/integration/test_postgres_fulltext.py` cobre o que o store em memória deliberadamente não imita: stemming e stop words por idioma da coleção (`rates` encontra `rate` em `english`, mas não em `simple`; `banco` encontra `bancos` em `portuguese`). `tests/integration/test_migrations.py` volta para a 0002, insere um chunk, sobe de novo e prova que a migração 0003 o tornou pesquisável.

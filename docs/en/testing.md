@@ -42,6 +42,10 @@ Everything above the adapter uses `tests/fakes.py::FakeEmbedder`: deterministic 
 
 `tests/unit/adapters/reranking/` runs `HttpReranker` against a real local `/rerank` stub (request body, auth header, scores returned out of order, TEI-style lists, HTTP errors, missing indexes, unreachable host) and `CrossEncoderReranker` with an injected fake model (lazy loading, one load, missing library). Tests never download a model; `tests/fakes.py::FakeReranker` stands in above the adapter.
 
+## Testing the chat model
+
+`tests/unit/adapters/generation/` runs `OpenAICompatibleChatModel` against a local `/v1/chat/completions` stub: messages and model on the wire, `temperature` / `reasoning_effort` sent only when configured, usage present or absent, HTTP errors and unreachable hosts. Above the adapter, `tests/fakes.py::FakeChatModel` returns scripted replies and records prompts.
+
 ## PostgreSQL-only behaviour
 
 `tests/integration/test_postgres_fulltext.py` covers what the in-memory store deliberately does not imitate: stemming and stop words per collection language (`rates` matches `rate` in `english` but not in `simple`; `banco` matches `bancos` in `portuguese`). `tests/integration/test_migrations.py` downgrades to 0002, inserts a chunk, upgrades again and proves migration 0003 made it searchable.
