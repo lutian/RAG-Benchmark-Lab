@@ -8,7 +8,7 @@ import math
 import re
 from collections import Counter
 from collections.abc import Sequence, Set
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import TracebackType
 from typing import Self
 from uuid import UUID
@@ -226,9 +226,13 @@ class InMemoryGoldenQuestionRepository:
         self._state.golden[question.id] = question
 
     def update(self, question: GoldenQuestion) -> None:
-        # Like an SQL UPDATE: a missing (or other-collection) question is left alone.
-        if self.get(question.collection_id, question.id) is not None:
-            self._state.golden[question.id] = question
+        # Like the SQL UPDATE: only text and status change, and a missing (or
+        # other-collection) question is left alone.
+        existing = self.get(question.collection_id, question.id)
+        if existing is not None:
+            self._state.golden[question.id] = replace(
+                existing, text=question.text, status=question.status
+            )
 
     def get(self, collection_id: UUID, question_id: UUID) -> GoldenQuestion | None:
         question = self._state.golden.get(question_id)

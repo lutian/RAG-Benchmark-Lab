@@ -138,3 +138,48 @@ def test_evidence_must_belong_to_the_question_collection_and_update_never_insert
         uow.commit()
     with uow_factory() as uow:
         assert uow.golden.list(alpha) == []
+
+
+def test_update_changes_text_and_status_but_never_evidence(
+    uow_factory: Callable[[], UnitOfWork], ingestion: IngestionService
+) -> None:
+    collection_id, document_id = seeded(ingestion, "eta")
+    original = GoldenQuestion.create(
+        collection_id, "Q?", (Evidence(document_id, Span(0, 5)),), QuestionOrigin.MANUAL
+    )
+    moved = GoldenQuestion(
+        **{**{f: getattr(original, f) for f in GoldenQuestion.__dataclass_fields__},
+           "text": "Q2?", "evidence": (Evidence(document_id, Span(6, 11)),)}
+    ).approve()  # fmt: skip
+
+    with uow_factory() as uow:
+        uow.golden.add(original)
+        uow.golden.update(moved)
+        uow.commit()
+    with uow_factory() as uow:
+        stored = uow.golden.get(collection_id, original.id)
+
+    assert stored is not None
+    assert (stored.text, stored.status) == ("Q2?", QuestionStatus.APPROVED)
+    assert stored.evidence == original.evidence
+
+
+def test_runs_with_the_same_timestamp_list_by_id(
+    uow_factory: Callable[[], UnitOfWork], ingestion: IngestionService
+) -> None:
+    collection_id, _ = seeded(ingestion, "theta")
+    config = BenchmarkConfig((CONFIG.key,), (SearchMethod.VECTOR,), ks=(1,))
+    created = datetime(2026, 3, 1, tzinfo=UTC)
+    runs = [
+        BenchmarkRun(uuid4(), collection_id, created, config, {}, 0, (), summarize((), config))
+        for _ in range(3)
+    ]
+
+    with uow_factory() as uow:
+        for run in runs:
+            uow.runs.add(run)
+        uow.commit()
+    with uow_factory() as uow:
+        listed = [r.id for r in uow.runs.list(collection_id)]
+
+    assert listed == sorted((r.id for r in runs), key=str)

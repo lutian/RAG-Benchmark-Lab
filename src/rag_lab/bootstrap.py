@@ -20,6 +20,7 @@ from rag_lab.application.ports.generation import ChatModel
 from rag_lab.application.ports.repositories import UnitOfWork
 from rag_lab.application.ports.reranking import Reranker
 from rag_lab.application.services.answering import AnswerService
+from rag_lab.application.services.golden import GoldenDatasetService
 from rag_lab.application.services.indexing import IndexingService
 from rag_lab.application.services.ingestion import IngestionService
 from rag_lab.application.services.retrieval import RetrievalService
@@ -34,6 +35,7 @@ class Container:
     indexing: IndexingService
     retrieval: RetrievalService
     answering: AnswerService
+    golden: GoldenDatasetService
     default_chunking_configs: tuple[ChunkingConfig, ...]
 
 
@@ -133,6 +135,13 @@ def _assemble(
         rerank_candidates=settings.rerank_candidates,
     )
     answering = AnswerService(retrieval=retrieval, chat=chat)
+    golden = GoldenDatasetService(uow_factory=uow_factory, chat=chat)
     return Container(
-        settings, ingestion, indexing, retrieval, answering, default_chunking_configs(settings)
+        settings,
+        ingestion,
+        indexing,
+        retrieval,
+        answering,
+        golden,
+        default_chunking_configs(settings),
     )

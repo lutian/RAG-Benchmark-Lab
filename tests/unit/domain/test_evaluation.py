@@ -154,3 +154,13 @@ def test_benchmark_config_validation() -> None:
         BenchmarkConfig(("a",), (SearchMethod.VECTOR,), judge=True)
     with pytest.raises(ValueError, match="positive"):
         BenchmarkConfig(("a",), (SearchMethod.VECTOR,), ks=(0,))
+
+
+def test_locate_excerpt_matches_across_whitespace_differences() -> None:
+    from rag_lab.domain.evaluation import locate_excerpt
+
+    text = "Refunds are issued\nwithin 14  days."
+
+    assert locate_excerpt(text, "issued within 14 days") == Span(12, 34)
+    assert locate_excerpt(text, "issued (within)") is None
+    assert locate_excerpt(text, "   ") is None

@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_validator
 
 from rag_lab.application.services.answering import Answer
+from rag_lab.application.services.golden import GoldenQuestionView, ImportReport
 from rag_lab.application.services.indexing import IndexingReport, IndexStatus
 from rag_lab.application.services.ingestion import IngestionResult
 from rag_lab.application.services.retrieval import MAX_TOP_K, SearchHit, SearchResult
@@ -15,6 +16,7 @@ from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
 from rag_lab.domain.embeddings import EmbeddingSpec
+from rag_lab.domain.evaluation import QuestionOrigin, QuestionStatus
 from rag_lab.domain.retrieval import SearchMethod
 
 
@@ -366,3 +368,70 @@ class AnswerOut(BaseModel):
                 total_ms=answer.timings.total_ms,
             ),
         )
+
+
+class EvidenceOut(BaseModel):
+    document_id: UUID
+    filename: str
+    start: int
+    end: int
+    excerpt: str
+
+
+class GoldenQuestionOut(BaseModel):
+    id: UUID
+    text: str
+    status: QuestionStatus
+    origin: QuestionOrigin
+    created_at: datetime
+    evidence: list[EvidenceOut]
+
+    @classmethod
+    def from_view(cls, view: GoldenQuestionView) -> "GoldenQuestionOut":
+        q = view.question
+        return cls(
+            id=q.id,
+            text=q.text,
+            status=q.status,
+            origin=q.origin,
+            created_at=q.created_at,
+            evidence=[
+                EvidenceOut(
+                    document_id=e.document_id,
+                    filename=e.filename,
+                    start=e.span.start,
+                    end=e.span.end,
+                    excerpt=e.excerpt,
+                )
+                for e in view.evidence
+            ],
+        )
+
+
+class ManualQuestionIn(BaseModel):
+    question: str = Field(min_length=1, max_length=2_000)
+    document_id: UUID
+    excerpt: str = Field(
+        min_length=1,
+        max_length=20_000,
+        description="Text copied from the document that answers the question.",
+    )
+
+
+class GenerateQuestionsIn(BaseModel):
+    count: int = Field(default=10, ge=1, le=200)
+    seed: int = Field(default=0, description="Same seed + same documents = same passages.")
+
+
+class QuestionUpdateIn(BaseModel):
+    text: str | None = Field(default=None, min_length=1, max_length=2_000)
+    status: QuestionStatus | None = None
+
+
+class ImportReportOut(BaseModel):
+    imported: int
+    skipped: int = Field(description="Questions whose documents are not in this collection.")
+
+    @classmethod
+    def from_report(cls, report: ImportReport) -> "ImportReportOut":
+        return cls(imported=report.imported, skipped=report.skipped)

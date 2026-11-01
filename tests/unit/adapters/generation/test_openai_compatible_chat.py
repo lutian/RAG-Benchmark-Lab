@@ -147,10 +147,15 @@ def test_http_errors_and_unreachable_hosts_are_provider_errors() -> None:
 
 
 @pytest.mark.parametrize("kind", ["error_body", "no_choices"])
-def test_a_200_response_without_a_completion_is_a_provider_error(kind: str) -> None:
+def test_a_200_response_without_a_completion_is_a_provider_error(
+    kind: str, caplog: pytest.LogCaptureFixture
+) -> None:
     server = StubChat(**{kind: True})  # type: ignore[arg-type]
     try:
         with pytest.raises(GenerationProviderError, match="my-model"):
             model(server.url).complete(MESSAGES)
     finally:
         server.server.shutdown()
+
+    # The original exception is logged so a local bug is not hidden behind a 502.
+    assert any(record.exc_info for record in caplog.records)

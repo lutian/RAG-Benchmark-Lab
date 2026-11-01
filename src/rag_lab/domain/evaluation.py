@@ -12,6 +12,7 @@ Metrics per question, for a ranked list of chunks:
 """
 
 import math
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -67,11 +68,14 @@ class GoldenQuestion:
     def with_text(self, text: str) -> "GoldenQuestion":
         return replace(self, text=_clean(text))
 
+    def with_status(self, status: QuestionStatus) -> "GoldenQuestion":
+        return replace(self, status=status)
+
     def approve(self) -> "GoldenQuestion":
-        return replace(self, status=QuestionStatus.APPROVED)
+        return self.with_status(QuestionStatus.APPROVED)
 
     def reject(self) -> "GoldenQuestion":
-        return replace(self, status=QuestionStatus.REJECTED)
+        return self.with_status(QuestionStatus.REJECTED)
 
 
 def _clean(text: str) -> str:
@@ -236,3 +240,17 @@ def summarize(
                 )
             )
     return tuple(summaries)
+
+
+def locate_excerpt(text: str, excerpt: str) -> Span | None:
+    """Find ``excerpt`` in ``text``, treating any run of whitespace as equal.
+
+    Lets a reviewer paste evidence copied from a PDF viewer (different line breaks)
+    and still get exact offsets into the canonical text. Returns the first match.
+    """
+    words = excerpt.split()
+    if not words:
+        return None
+    pattern = r"\s+".join(re.escape(word) for word in words)
+    match = re.search(pattern, text)
+    return Span(match.start(), match.end()) if match else None

@@ -3,7 +3,13 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from rag_lab.adapters.inbound.api.routes import answering, collections, indexing, retrieval
+from rag_lab.adapters.inbound.api.routes import (
+    answering,
+    collections,
+    golden,
+    indexing,
+    retrieval,
+)
 from rag_lab.application.errors import (
     ConflictError,
     DocumentParsingError,
@@ -65,4 +71,5 @@ def create_app(container: Container | None = None) -> FastAPI:
     app.include_router(indexing.router)
     app.include_router(retrieval.router)
     app.include_router(answering.router)
+    app.include_router(golden.router)
     return app

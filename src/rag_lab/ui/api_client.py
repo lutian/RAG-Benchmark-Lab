@@ -145,6 +145,59 @@ class ApiClient:
         )
         return result
 
+    # --- golden dataset -----------------------------------------------------------
+    def golden_questions(
+        self, collection_id: str, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        params = {"status": status} if status else None
+        result: list[dict[str, Any]] = self._request(
+            "GET", f"/collections/{collection_id}/golden", params=params
+        )
+        return result
+
+    def golden_add(
+        self, collection_id: str, question: str, document_id: str, excerpt: str
+    ) -> dict[str, Any]:
+        body = {"question": question, "document_id": document_id, "excerpt": excerpt}
+        result: dict[str, Any] = self._request(
+            "POST", f"/collections/{collection_id}/golden", json=body
+        )
+        return result
+
+    def golden_generate(self, collection_id: str, count: int, seed: int) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = self._request(
+            "POST",
+            f"/collections/{collection_id}/golden/generate",
+            json={"count": count, "seed": seed},
+            timeout=self._generation_timeout * max(1, count),
+        )
+        return result
+
+    def golden_update(
+        self, collection_id: str, question_id: str, text: str | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:  # fmt: skip
+        body = {key: value for key, value in {"text": text, "status": status}.items() if value}
+        result: dict[str, Any] = self._request(
+            "PATCH", f"/collections/{collection_id}/golden/{question_id}", json=body
+        )
+        return result
+
+    def golden_delete(self, collection_id: str, question_id: str) -> None:
+        response = self._http.delete(f"/collections/{collection_id}/golden/{question_id}")
+        if response.status_code >= 400:
+            raise ApiError(response.json().get("detail", response.text))
+
+    def golden_export(self, collection_id: str) -> dict[str, Any]:
+        result: dict[str, Any] = self._request("GET", f"/collections/{collection_id}/golden/export")
+        return result
+
+    def golden_import(self, collection_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        result: dict[str, Any] = self._request(
+            "POST", f"/collections/{collection_id}/golden/import", json=payload
+        )
+        return result
+
 
 @st.cache_resource
 def _cached_client(base_url: str, generation_timeout: float) -> ApiClient:

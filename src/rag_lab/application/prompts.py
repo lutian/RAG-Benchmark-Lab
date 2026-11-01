@@ -35,3 +35,25 @@ def answer_messages(question: str, sources: Sequence[Chunk]) -> list[ChatMessage
     blocks = [f"{_label(n, chunk)}\n{chunk.text}" for n, chunk in enumerate(sources, start=1)]
     user = "Sources:\n\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question}"
     return [ChatMessage("system", SYSTEM_PROMPT), ChatMessage("user", user)]
+
+
+SKIP = "SKIP"
+
+QUESTION_PROMPT = f"""You write evaluation questions for a document search engine.
+
+Given a passage, write ONE question that the passage answers.
+
+Rules:
+1. The passage alone must be enough to answer it.
+2. Be specific: ask about names, numbers, conditions or steps stated in the passage.
+3. Ask it the way a real user would. Do not copy long phrases from the passage; \
+paraphrase, so the question does not simply repeat its words.
+4. Write the question in the same language as the passage.
+5. If the passage has no factual content (table of contents, boilerplate, a lone \
+heading), reply exactly {SKIP}.
+
+Reply with the question only."""
+
+
+def question_messages(passage: str) -> list[ChatMessage]:
+    return [ChatMessage("system", QUESTION_PROMPT), ChatMessage("user", f"Passage:\n{passage}")]
