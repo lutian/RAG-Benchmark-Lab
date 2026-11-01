@@ -12,7 +12,8 @@ separate Compose project that it removes afterwards.
 
 Standard library only, so it runs on the host with any Python 3.10+:
 
-    python3 scripts/compose_smoke.py [--api-url ...] [--ui-url ...]
+    docker compose up --detach --build --wait db api ui   # or: make compose-smoke
+    python3 scripts/compose_smoke.py [--api-url URL] [--ui-url URL] [--timeout SECONDS]
 """
 
 import argparse

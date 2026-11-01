@@ -43,12 +43,13 @@ demo-docker:        ## Same, inside the running Compose stack
 # It publishes the same ports, so stop the main stack first (`docker compose down`).
 SMOKE = docker compose --project-name rag-benchmark-lab-smoke
 
+# On failure the container logs are printed before teardown; Ctrl-C still tears down.
 compose-smoke:      ## Build a throwaway db/api/ui stack, smoke-test it, remove it (no provider key needed)
-	$(SMOKE) up --detach --build --wait --wait-timeout 600 db api ui; \
-	status=$$?; \
-	if [ $$status -eq 0 ]; then python3 scripts/compose_smoke.py; status=$$?; fi; \
-	$(SMOKE) down --volumes; \
-	exit $$status
+	trap '$(SMOKE) down --volumes' EXIT; \
+	trap 'exit 130' INT TERM; \
+	$(SMOKE) up --detach --build --wait --wait-timeout 600 db api ui \
+		&& python3 scripts/compose_smoke.py \
+		|| { $(SMOKE) logs --no-color; exit 1; }
 
 golden:             ## Rebuild examples/golden.json after editing the sample corpus or questions
 	uv run python examples/build_golden.py
