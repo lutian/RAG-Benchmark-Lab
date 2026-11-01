@@ -38,9 +38,13 @@ TEST_DATABASE_URL=postgresql+psycopg://rag:rag@localhost:5432/rag_lab uv run pyt
 
 Everything above the adapter uses `tests/fakes.py::FakeEmbedder`: deterministic vectors, with switches to fail on the n-th call or return the wrong dimension. Retrieval tests use `ConceptEmbedder`, which maps synonyms to the same dimension, so a test can show vector search finding a paraphrase ("car" → "automobile") that full-text search misses.
 
+## Testing the rerankers
+
+`tests/unit/adapters/reranking/` runs `HttpReranker` against a real local `/rerank` stub (request body, auth header, scores returned out of order, TEI-style lists, HTTP errors, missing indexes, unreachable host) and `CrossEncoderReranker` with an injected fake model (lazy loading, one load, missing library). Tests never download a model; `tests/fakes.py::FakeReranker` stands in above the adapter.
+
 ## PostgreSQL-only behaviour
 
-`tests/integration/test_postgres_fulltext.py` covers what the in-memory store deliberately does not imitate: stemming and stop words per collection language (`rates` matches `rate` in `english` but not in `simple`; `banco` matches `bancos` in `portuguese`).
+`tests/integration/test_postgres_fulltext.py` covers what the in-memory store deliberately does not imitate: stemming and stop words per collection language (`rates` matches `rate` in `english` but not in `simple`; `banco` matches `bancos` in `portuguese`). `tests/integration/test_migrations.py` downgrades to 0002, inserts a chunk, upgrades again and proves migration 0003 made it searchable.
 
 ## Why contract tests?
 

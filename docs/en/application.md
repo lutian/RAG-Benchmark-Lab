@@ -10,9 +10,10 @@ The application layer holds the **use cases** (what the system can do) and the *
 |--------|---------|
 | `services/ingestion.py` | `IngestionService`: collections, document ingestion, chunk sets |
 | `services/indexing.py` | `IndexingService`: embed chunk sets, binding, progress |
-| `services/retrieval.py` | `RetrievalService`: vector, full-text and hybrid search with filters and timings |
+| `services/retrieval.py` | `RetrievalService`: vector, full-text, hybrid and reranked hybrid search with filters and timings |
 | `ports/parsing.py` | `DocumentParser` port and its output `ParsedDocument` |
 | `ports/embeddings.py` | `Embedder` (the model) and `EmbeddingRepository` (the vector store) ports |
+| `ports/reranking.py` | `Reranker`: scores (question, text) pairs |
 | `ports/search.py` | `SearchRepository`: ranked vector and full-text lookups over one chunk set |
 | `ports/repositories.py` | Repository ports and the `UnitOfWork` transaction boundary |
 | `errors.py` | Expected failures, translated to HTTP codes by the API |
@@ -52,9 +53,9 @@ Design points:
 
 | Use case | Behaviour |
 |----------|-----------|
-| `search(id, key, query, method, top_k=10, document_ids=None)` | Ranks the chunks of one chunk set and returns a `SearchResult`: hits (chunk, score, rank, rank per method) and timings (`embed_ms`, `search_ms`, `total_ms`) |
+| `search(id, key, query, method, top_k=10, document_ids=None)` | Ranks the chunks of one chunk set and returns a `SearchResult`: hits (chunk, score, rank, rank per method) and timings (`embed_ms`, `search_ms`, `rerank_ms`, `total_ms`) |
 
-Flow: validate (non-blank query, `1 ≤ top_k ≤ 100`) → check the chunk set exists → for `vector`/`hybrid`, check the embedding binding and coverage → embed the query → search → fuse (hybrid).
+Flow: validate (non-blank query, `1 ≤ top_k ≤ 100`) → check the chunk set exists → for `vector`/`hybrid`, check the embedding binding and coverage → embed the query → search → fuse (hybrid) → rerank (`hybrid_rerank`).
 
 Design points:
 
@@ -62,9 +63,21 @@ Design points:
 - **Hybrid digs deeper than `top_k`.** Each method returns `RETRIEVAL_CANDIDATES` (default 50) chunks before fusion, because a chunk ranked 12th by both methods can deserve a top-5 fused position.
 - **Timings per stage.** Embedding the query (a network call) and searching (the database) are measured separately, so the benchmark can show where latency comes from. Full-text never calls the embedder (`embed_ms = 0`).
 - **Filters.** `document_ids` restricts every method to those documents (the "Filters" step of the question flow).
+- **Reranking (`hybrid_rerank`).** The best `RERANK_CANDIDATES` (default 30) hybrid hits go to the `Reranker`, which scores each (question, chunk) pair; hits are reordered by that score (ties keep the hybrid order) and cut to `top_k`. Each hit keeps `ranks["hybrid"]`, its position before reranking, so the UI shows moves like "hybrid #7 → #1". Reranking time is reported as `rerank_ms`. A reranker that returns a different number of scores is a `RerankerError`.
+- **Query vectors are validated** against the embedder's dimension; a wrong length is an `EmbeddingProviderError` (502), never a database error.
 - **Explainable hits.** Every hit carries `ranks`, e.g. `{"vector": 9, "fulltext": 1}` for a chunk that only the lexical method found near the top.
 
 ## Ports
+
+### `Reranker`
+
+```python
+name: str
+def score(self, query: str, texts: Sequence[str]) -> list[float]  # one score per text, input order
+```
+
+A cross-encoder reads the question and the chunk **together**, so it judges relevance better than comparing two independently computed embeddings, at the cost of one model pass per candidate. That is why it only reorders a short candidate list. Implementations raise `RerankerError`.
+
 
 ### `DocumentParser`
 
@@ -111,8 +124,9 @@ Implementations wrap provider failures in `EmbeddingProviderError`. `embed_query
 |-------|---------|------|
 | `NotFoundError` | Entity does not exist **or belongs to another collection** | 404 |
 | `ConflictError` | Duplicate collection name or chunk set; collection bound to another embedding model; vector/hybrid search on a chunk set that is not fully indexed | 409 |
-| `InvalidRequestError` | Values that cannot be used: blank query, `top_k` out of range, unknown full-text language, blank collection name | 422 |
+| `InvalidRequestError` | Values that cannot be used: `hybrid_rerank` without a reranker, blank query, `top_k` out of range, unknown full-text language, blank collection name | 422 |
 | `EmbeddingProviderError` | Embeddings API failed, was unreachable, or returned vectors of the wrong size | 502 |
+| `RerankerError` | Reranker could not load (missing `local-rerank` extra), its API failed, or it returned malformed scores | 502 |
 | `UploadTooLargeError` | File exceeds `MAX_UPLOAD_MB` | 413 |
 | `UnsupportedDocumentError` | Extension is not `.pdf`, `.md`, `.markdown`, `.txt` | 415 |
 | `DocumentParsingError` | Supported type but unreadable (corrupt, empty, scanned PDF without text) | 422 |

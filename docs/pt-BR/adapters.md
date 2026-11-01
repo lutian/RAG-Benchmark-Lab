@@ -9,6 +9,7 @@ Os adaptadores são o único código que toca arquivos, bancos de dados, HTTP e 
 | Parsers | Saída | `DocumentParser` | pypdf, Markdown via regex |
 | Persistência PostgreSQL | Saída | `UnitOfWork` + repositórios | SQLAlchemy Core 2, psycopg 3, Alembic |
 | Persistência em memória | Saída | `UnitOfWork` + repositórios | Dicionários simples |
+| Reranking | Saída | `Reranker` | Cross-encoder do Sentence Transformers, ou `httpx` → qualquer API `/rerank` |
 | Embeddings | Saída | `Embedder` | `OpenAIEmbeddings` do LangChain → qualquer API compatível com OpenAI |
 | API HTTP | Entrada | `IngestionService` | FastAPI, Pydantic v2 |
 | UI Streamlit | Entrada (cliente) | API HTTP | Streamlit, httpx |
@@ -44,6 +45,19 @@ Os adaptadores são o único código que toca arquivos, bancos de dados, HTTP e 
 Todo `openai.OpenAIError` (erro HTTP, timeout, conexão recusada) vira `EmbeddingProviderError`, com a URL e o modelo na mensagem → HTTP 502.
 
 **Por que LangChain aqui e não o SDK `openai` direto?** A stack do projeto inclui o LangChain, e o valor dele está na borda dos provedores: uma interface (`Embeddings`) sobre muitos provedores, que as próximas fases reutilizam para os modelos de chat. Ele fica restrito a este adaptador; o resto do código só enxerga o port `Embedder`.
+
+## Reranking — `adapters/outbound/reranking/`
+
+| Adaptador | `RERANKER_PROVIDER` | Como funciona |
+|-----------|---------------------|---------------|
+| `CrossEncoderReranker` | `local` (padrão) | `CrossEncoder` do Sentence Transformers no processo da API. O modelo (`RERANKER_MODEL`, padrão `cross-encoder/ms-marco-MiniLM-L-6-v2`, ~90 MB) é baixado e carregado na **primeira** busca com reranking, protegido por um lock para que requisições concorrentes o carreguem uma única vez |
+| `HttpReranker` | `api` | `POST {RERANKER_BASE_URL}/rerank` com `{model, query, documents, top_n}` e `Authorization: Bearer RERANKER_API_KEY`. Lê `{"results": [{"index", "relevance_score"}]}` (Jina, Cohere v2, servidor do llama.cpp, vLLM) ou uma lista simples `[{"index", "score"}]`, e devolve os scores na ordem de entrada pelo `index` |
+
+- `sentence-transformers` e torch são um **extra opcional** (`uv sync --extra local-rerank`). No Linux, o torch vem do índice CPU do PyTorch (`[tool.uv.sources]`), o que evita gigabytes de bibliotecas CUDA. Sem o extra, uma busca com reranking retorna 502 com "Install the 'local-rerank' extra or set RERANKER_PROVIDER=api".
+- A primeira busca com reranking paga o carregamento do modelo (segundos). Os benchmarks de latência aquecem o reranker antes de medir.
+- Toda falha (carregamento, execução, status HTTP, corpo malformado, host inacessível) vira `RerankerError` → HTTP 502.
+
+**Por que não fazer o reranking pelo LangChain?** Os rerankers do LangChain encapsulam fornecedores específicos; um adaptador de 40 linhas com `httpx` cobre qualquer servidor `/rerank` que fale o esquema Jina/Cohere (o padrão de fato), e o adaptador local é uma camada fina sobre a biblioteca que de fato roda o modelo.
 
 ## Persistência — `adapters/outbound/persistence/`
 
@@ -112,7 +126,7 @@ O mesmo contrato sobre dicionários, com rollback real (cada transação trabalh
 | `GET` | `/collections/{id}/chunk-sets/{key}/chunks?document_id=` | Chunks com spans, páginas e caminhos de títulos |
 | `POST` | `/collections/{id}/chunk-sets/{key}/index?rebuild=false` | Gera os embeddings dos chunks pendentes; retorna total / já indexados / gerados / segundos |
 | `GET` | `/collections/{id}/index` | Vínculo de embeddings e `embedded / total` por chunk set |
-| `POST` | `/collections/{id}/search` | Corpo `{query, chunk_set, method: vector\|fulltext\|hybrid, top_k, document_ids}`; retorna resultados ordenados com spans, score, `ranks` por método e tempos |
+| `POST` | `/collections/{id}/search` | Corpo `{query, chunk_set, method: vector\|fulltext\|hybrid\|hybrid_rerank, top_k, document_ids}`; retorna resultados ordenados com spans, score, `ranks` por etapa e tempos |
 
 A documentação interativa fica em `http://localhost:8000/docs` (OpenAPI).
 
@@ -133,7 +147,7 @@ A documentação interativa fica em `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Ponto de entrada e navegação |
 | `pages/home.py` | Visão geral dos dois pipelines |
 | `pages/ingestion.py` | Coleções (barra lateral), uploads, lista de documentos, **inspetor de chunks**, progresso da indexação e a ação **Index chunk set** (com rebuild opcional) |
-| `pages/retrieval.py` | **Comparação de métodos**: uma pergunta, três colunas (vetorial, full-text, híbrida), cada resultado com score, posição por método, localização e termos da pergunta destacados; filtro por documento e `top_k` na barra lateral |
+| `pages/retrieval.py` | **Comparação de métodos**: uma pergunta, quatro colunas (vetorial, full-text, híbrida, híbrida + rerank), cada resultado com score, posição por etapa (inclusive a posição na híbrida antes do reranking), localização e termos da pergunta destacados; filtro por documento e `top_k` na barra lateral |
 | `highlight.py` | Funções puras que desenham os spans dos chunks com destaques alternados (sobreposições ganham uma cor própria) e marcam os termos da pergunta como evidência |
 | `api_client.py` | Cliente `httpx` tipado para a API |
 | `theme.py` + `.streamlit/config.toml` | Identidade visual: fundo branco, destaque azul `#2563EB`, fonte Inter, cards e badges |

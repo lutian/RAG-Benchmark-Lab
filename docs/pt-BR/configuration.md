@@ -38,8 +38,10 @@ docker compose up --build
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | OpenAI | Indexação (fase 2) | Qualquer endpoint `/embeddings` compatível com OpenAI |
 | `EMBEDDING_DIMENSIONS` | `1536` | Indexação | Deve corresponder ao modelo (ex.: `768` para `nomic-embed-text`). Não é enviado ao provedor: serve para validar os vetores retornados e vincular a coleção |
 | `EMBEDDING_BATCH_SIZE` | `64` | Indexação | Textos por requisição de embeddings |
-| `RERANKER_PROVIDER` | `local` | Reranking (fase 4) | `local` (cross-encoder no processo) ou `api` (HTTP `/rerank`) |
-| `RERANKER_MODEL` / `RERANKER_BASE_URL` / `RERANKER_API_KEY` | Cross-encoder MiniLM | Reranking | URL e chave só para `api` |
+| `RERANKER_PROVIDER` | `local` | Reranking | `local` (cross-encoder no processo, exige o extra `local-rerank`) ou `api` (HTTP `/rerank`) |
+| `RERANKER_MODEL` / `RERANKER_BASE_URL` / `RERANKER_API_KEY` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Reranking | Id do modelo no Hugging Face para `local`, nome do modelo enviado à API para `api`; URL (ex.: `http://host:8080/v1`) e chave só para `api` |
+| `RERANK_CANDIDATES` | `30` | Reranking | Resultados da híbrida entregues ao reranker; mais = mais chance de resgatar um chunk enterrado, porém mais lento |
+| `INSTALL_LOCAL_RERANKER` | `true` | Build do Docker | Argumento de build do Compose; `false` gera uma imagem sem torch (use com `RERANKER_PROVIDER=api`) |
 | `MAX_UPLOAD_MB` | `25` | Ingestão | Arquivos maiores recebem HTTP 413 |
 | `DEFAULT_CHUNK_SIZE` / `DEFAULT_CHUNK_OVERLAP` | `800` / `120` | Ingestão | Em caracteres; padrões para novas coleções |
 | `DEFAULT_FULLTEXT_LANGUAGE` | `english` | Coleções | Configuração de busca textual do PostgreSQL para novas coleções (`portuguese`, `spanish`, `simple`…). Validada na inicialização |

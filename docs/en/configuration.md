@@ -38,8 +38,10 @@ docker compose up --build
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | OpenAI | Indexing (phase 2) | Any OpenAI-compatible `/embeddings` endpoint |
 | `EMBEDDING_DIMENSIONS` | `1536` | Indexing | Must match the model (e.g. `768` for `nomic-embed-text`). Not sent to the provider: used to validate returned vectors and bind the collection |
 | `EMBEDDING_BATCH_SIZE` | `64` | Indexing | Texts per embeddings request |
-| `RERANKER_PROVIDER` | `local` | Reranking (phase 4) | `local` (cross-encoder in-process) or `api` (HTTP `/rerank`) |
-| `RERANKER_MODEL` / `RERANKER_BASE_URL` / `RERANKER_API_KEY` | MiniLM cross-encoder | Reranking | URL and key only for `api` |
+| `RERANKER_PROVIDER` | `local` | Reranking | `local` (cross-encoder in-process, needs the `local-rerank` extra) or `api` (HTTP `/rerank`) |
+| `RERANKER_MODEL` / `RERANKER_BASE_URL` / `RERANKER_API_KEY` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Reranking | Hugging Face model id for `local`, model name sent to the API for `api`; URL (e.g. `http://host:8080/v1`) and key only for `api` |
+| `RERANK_CANDIDATES` | `30` | Reranking | Hybrid hits handed to the reranker; more = better chance to rescue a buried chunk, slower |
+| `INSTALL_LOCAL_RERANKER` | `true` | Docker build | Compose build argument; `false` builds an image without torch (use with `RERANKER_PROVIDER=api`) |
 | `MAX_UPLOAD_MB` | `25` | Ingestion | Larger files get HTTP 413 |
 | `DEFAULT_CHUNK_SIZE` / `DEFAULT_CHUNK_OVERLAP` | `800` / `120` | Ingestion | Characters; defaults for new collections |
 | `DEFAULT_FULLTEXT_LANGUAGE` | `english` | Collections | PostgreSQL text search configuration for new collections (`portuguese`, `spanish`, `simple`…). Validated at startup |

@@ -103,7 +103,7 @@ It also records its **full-text language** (`fulltext_language`, default `englis
 
 ## Retrieval — `SearchMethod` and Reciprocal Rank Fusion
 
-**What it is:** the three methods the lab compares (`vector`, `fulltext`, `hybrid`), the `ScoredChunk` a method returns (higher score is better) and `reciprocal_rank_fusion()`.
+**What it is:** the four strategies the lab compares (`vector`, `fulltext`, `hybrid`, `hybrid_rerank`), the `ScoredChunk` a method returns (higher score is better) and `reciprocal_rank_fusion()`.
 
 **What fusion does:** hybrid search gets one ranking per method and scores every chunk with
 

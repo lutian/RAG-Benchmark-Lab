@@ -14,7 +14,7 @@ Each record states the decision first, then the alternatives that were rejected 
 | [006](#adr-006-openai-compatible-providers-configured-in-env) | OpenAI-compatible providers configured in `.env` | Accepted (embeddings done, chat planned) |
 | [007](#adr-007-streamlit-with-custom-css) | Streamlit with custom CSS | Accepted |
 | [008](#adr-008-collections-as-the-isolation-boundary) | Collections as the isolation boundary | Accepted |
-| [009](#adr-009-local-cross-encoder-plus-rerank-api-adapter) | Local cross-encoder plus `/rerank` API adapter | Planned |
+| [009](#adr-009-local-cross-encoder-plus-rerank-api-adapter) | Local cross-encoder plus `/rerank` API adapter | Accepted |
 | [010](#adr-010-synthetic-golden-questions-with-human-review) | Synthetic golden questions with human review | Planned |
 | [011](#adr-011-explicit-resumable-indexing) | Explicit, resumable indexing with model-bound collections | Accepted |
 | [012](#adr-012-one-vector-table-without-a-fixed-dimension) | One vector table without a fixed dimension | Accepted |
@@ -93,9 +93,15 @@ Each record states the decision first, then the alternatives that were rejected 
 
 ## ADR-009: Local cross-encoder plus rerank API adapter
 
-**Decision (planned, phase 4):** the default reranker is a Sentence Transformers cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) running in-process. A second adapter calls HTTP `/rerank` endpoints (Jina/Cohere style, TEI, llama.cpp, vLLM). The choice comes from `RERANKER_PROVIDER`.
+**Decision:** the default reranker is a Sentence Transformers cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) running in-process and loaded on first use. A second adapter calls HTTP `/rerank` endpoints (Jina/Cohere schema: Jina, Cohere v2, llama.cpp, vLLM). The choice comes from `RERANKER_PROVIDER`. Reranking is the fourth strategy, `hybrid_rerank`: it reorders the best `RERANK_CANDIDATES` hybrid hits. sentence-transformers is an optional extra with CPU-only torch on Linux.
 
-**Why:** the OpenAI API has no rerank endpoint. A small local model works offline on CPU, and the API adapter avoids shipping torch where a rerank service already exists.
+**Why:** the OpenAI API has no rerank endpoint. A small local model works offline on CPU (≈35 ms for 3 candidates after loading), and the API adapter avoids shipping torch where a rerank service already exists. Reranking only hybrid output keeps the comparison to the four strategies the experiment defines and measures exactly one change: hybrid vs hybrid + rerank.
+
+| Alternative | Why not |
+|-------------|---------|
+| LLM as reranker (prompted scoring) | Slow and costly per candidate; mixes generation quality into a retrieval metric |
+| Rerank every method | Four extra strategies to compare without a question asking for them |
+| torch as a required dependency | ~1 GB for users who rerank through an API; hence the optional extra and `INSTALL_LOCAL_RERANKER` |
 
 ## ADR-010: Synthetic golden questions with human review
 

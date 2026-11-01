@@ -14,7 +14,7 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 | [006](#adr-006-provedores-compatíveis-com-openai-configurados-no-env) | Provedores compatíveis com OpenAI configurados no `.env` | Aceita (embeddings prontos, chat planejado) |
 | [007](#adr-007-streamlit-com-css-customizado) | Streamlit com CSS customizado | Aceita |
 | [008](#adr-008-coleções-como-fronteira-de-isolamento) | Coleções como fronteira de isolamento | Aceita |
-| [009](#adr-009-cross-encoder-local-e-adaptador-de-api-de-rerank) | Cross-encoder local e adaptador de API `/rerank` | Planejada |
+| [009](#adr-009-cross-encoder-local-e-adaptador-de-api-de-rerank) | Cross-encoder local e adaptador de API `/rerank` | Aceita |
 | [010](#adr-010-perguntas-golden-sintéticas-com-revisão-humana) | Perguntas golden sintéticas com revisão humana | Planejada |
 | [011](#adr-011-indexação-explícita-e-retomável) | Indexação explícita e retomável, com coleções vinculadas ao modelo | Aceita |
 | [012](#adr-012-uma-tabela-de-vetores-sem-dimensão-fixa) | Uma tabela de vetores sem dimensão fixa | Aceita |
@@ -93,9 +93,15 @@ Cada registro apresenta primeiro a decisão e depois as alternativas descartadas
 
 ## ADR-009: Cross-encoder local e adaptador de API de rerank
 
-**Decisão (planejada, fase 4):** o reranker padrão é um cross-encoder do Sentence Transformers (`cross-encoder/ms-marco-MiniLM-L-6-v2`) rodando no processo. Um segundo adaptador chama endpoints HTTP `/rerank` (estilo Jina/Cohere, TEI, llama.cpp, vLLM). A escolha vem de `RERANKER_PROVIDER`.
+**Decisão:** o reranker padrão é um cross-encoder do Sentence Transformers (`cross-encoder/ms-marco-MiniLM-L-6-v2`) rodando no processo e carregado no primeiro uso. Um segundo adaptador chama endpoints HTTP `/rerank` (esquema Jina/Cohere: Jina, Cohere v2, llama.cpp, vLLM). A escolha vem de `RERANKER_PROVIDER`. O reranking é a quarta estratégia, `hybrid_rerank`: ele reordena os `RERANK_CANDIDATES` melhores resultados da híbrida. O sentence-transformers é um extra opcional, com torch só para CPU no Linux.
 
-**Por quê:** a API da OpenAI não tem endpoint de rerank. Um modelo local pequeno funciona offline em CPU, e o adaptador de API evita levar o torch para a imagem quando já existe um serviço de rerank.
+**Por quê:** a API da OpenAI não tem endpoint de rerank. Um modelo local pequeno funciona offline em CPU (≈35 ms para 3 candidatos depois de carregado), e o adaptador de API evita levar o torch para a imagem quando já existe um serviço de rerank. Reordenar apenas a saída da híbrida mantém a comparação nas quatro estratégias que o experimento define e mede exatamente uma mudança: híbrida contra híbrida + rerank.
+
+| Alternativa | Por que não |
+|-------------|-------------|
+| LLM como reranker (pontuação por prompt) | Lento e caro por candidato; mistura a qualidade da geração em uma métrica de recuperação |
+| Reordenar todos os métodos | Quatro estratégias a mais para comparar, sem uma pergunta que as peça |
+| torch como dependência obrigatória | ~1 GB para quem faz rerank por API; por isso o extra opcional e o `INSTALL_LOCAL_RERANKER` |
 
 ## ADR-010: Perguntas golden sintéticas com revisão humana
 

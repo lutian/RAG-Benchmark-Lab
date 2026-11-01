@@ -9,6 +9,7 @@ Adapters are the only code that touches files, databases, HTTP and frameworks. *
 | Parsers | Outbound | `DocumentParser` | pypdf, regex-based Markdown |
 | PostgreSQL persistence | Outbound | `UnitOfWork` + repositories | SQLAlchemy Core 2, psycopg 3, Alembic |
 | In-memory persistence | Outbound | `UnitOfWork` + repositories | Plain dicts |
+| Reranking | Outbound | `Reranker` | Sentence Transformers cross-encoder, or `httpx` → any `/rerank` API |
 | Embeddings | Outbound | `Embedder` | LangChain `OpenAIEmbeddings` → any OpenAI-compatible API |
 | HTTP API | Inbound | `IngestionService` | FastAPI, Pydantic v2 |
 | Streamlit UI | Inbound (client) | HTTP API | Streamlit, httpx |
@@ -44,6 +45,19 @@ Adapters are the only code that touches files, databases, HTTP and frameworks. *
 Every `openai.OpenAIError` (HTTP error, timeout, connection refused) becomes `EmbeddingProviderError`, with the URL and model in the message → HTTP 502.
 
 **Why LangChain here and not the raw `openai` SDK?** The project stack names LangChain, and its value is at the provider edge: one interface (`Embeddings`) over many providers, which later phases reuse for chat models. It stays inside this adapter; the rest of the code only sees the `Embedder` port.
+
+## Reranking — `adapters/outbound/reranking/`
+
+| Adapter | `RERANKER_PROVIDER` | How it works |
+|---------|---------------------|--------------|
+| `CrossEncoderReranker` | `local` (default) | Sentence Transformers `CrossEncoder` in the API process. The model (`RERANKER_MODEL`, default `cross-encoder/ms-marco-MiniLM-L-6-v2`, ~90 MB) is downloaded and loaded on the **first** reranked search, behind a lock so concurrent requests load it once |
+| `HttpReranker` | `api` | `POST {RERANKER_BASE_URL}/rerank` with `{model, query, documents, top_n}` and `Authorization: Bearer RERANKER_API_KEY`. Reads `{"results": [{"index", "relevance_score"}]}` (Jina, Cohere v2, llama.cpp server, vLLM) or a bare `[{"index", "score"}]` list, and maps scores back to input order by `index` |
+
+- `sentence-transformers` and torch are an **optional extra** (`uv sync --extra local-rerank`). On Linux, torch comes from the PyTorch CPU index (`[tool.uv.sources]`), which avoids gigabytes of CUDA libraries. Without the extra, a reranked search returns 502 with "Install the 'local-rerank' extra or set RERANKER_PROVIDER=api".
+- The first reranked search pays the model load (seconds). Latency benchmarks warm the reranker up before measuring.
+- Every failure (load, runtime, HTTP status, malformed body, unreachable host) becomes `RerankerError` → HTTP 502.
+
+**Why not rerank through LangChain?** LangChain's rerankers wrap specific vendors; a 40-line `httpx` adapter covers every `/rerank` server that speaks the de facto Jina/Cohere schema, and the local adapter is a thin wrapper over the library that actually runs the model.
 
 ## Persistence — `adapters/outbound/persistence/`
 
@@ -112,7 +126,7 @@ The same contract backed by dictionaries, with real rollback (each transaction w
 | `GET` | `/collections/{id}/chunk-sets/{key}/chunks?document_id=` | Chunks with spans, pages and heading paths |
 | `POST` | `/collections/{id}/chunk-sets/{key}/index?rebuild=false` | Embed pending chunks; returns total / already indexed / embedded / seconds |
 | `GET` | `/collections/{id}/index` | Embedding binding and `embedded / total` per chunk set |
-| `POST` | `/collections/{id}/search` | Body `{query, chunk_set, method: vector\|fulltext\|hybrid, top_k, document_ids}`; returns ranked hits with spans, score, `ranks` per method and timings |
+| `POST` | `/collections/{id}/search` | Body `{query, chunk_set, method: vector\|fulltext\|hybrid\|hybrid_rerank, top_k, document_ids}`; returns ranked hits with spans, score, `ranks` per stage and timings |
 
 Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).
 
@@ -133,7 +147,7 @@ Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Entry point and navigation |
 | `pages/home.py` | Overview of both pipelines |
 | `pages/ingestion.py` | Collections (sidebar), uploads, document list, **chunk inspector**, indexing progress and the **Index chunk set** action (with optional rebuild) |
-| `pages/retrieval.py` | **Method comparison**: one question, three columns (vector, full-text, hybrid), each hit with score, rank per method, location and highlighted query terms; document filter and `top_k` in the sidebar |
+| `pages/retrieval.py` | **Method comparison**: one question, four columns (vector, full-text, hybrid, hybrid + rerank), each hit with score, rank per stage (including its hybrid rank before reranking), location and highlighted query terms; document filter and `top_k` in the sidebar |
 | `highlight.py` | Pure functions rendering chunk spans as alternating highlights (overlaps get their own colour) and marking query terms as evidence |
 | `api_client.py` | Typed `httpx` client for the API |
 | `theme.py` + `.streamlit/config.toml` | Visual identity: white canvas, blue accent `#2563EB`, Inter font, cards and badges |

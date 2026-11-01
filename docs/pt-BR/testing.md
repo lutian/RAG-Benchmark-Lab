@@ -38,9 +38,13 @@ TEST_DATABASE_URL=postgresql+psycopg://rag:rag@localhost:5432/rag_lab uv run pyt
 
 Tudo acima do adaptador usa `tests/fakes.py::FakeEmbedder`: vetores determinísticos, com opções para falhar na n-ésima chamada ou retornar a dimensão errada. Os testes de recuperação usam o `ConceptEmbedder`, que coloca sinônimos na mesma dimensão, para que um teste mostre a busca vetorial encontrando uma paráfrase ("car" → "automobile") que a busca full-text não encontra.
 
+## Testando os rerankers
+
+`tests/unit/adapters/reranking/` roda o `HttpReranker` contra um stub `/rerank` local real (corpo da requisição, header de autenticação, scores devolvidos fora de ordem, listas no estilo TEI, erros HTTP, índices faltando, host inacessível) e o `CrossEncoderReranker` com um modelo falso injetado (carregamento preguiçoso, uma única carga, biblioteca ausente). Os testes nunca baixam um modelo; acima do adaptador, quem atua é o `tests/fakes.py::FakeReranker`.
+
 ## Comportamento exclusivo do PostgreSQL
 
-`tests/integration/test_postgres_fulltext.py` cobre o que o store em memória deliberadamente não imita: stemming e stop words por idioma da coleção (`rates` encontra `rate` em `english`, mas não em `simple`; `banco` encontra `bancos` em `portuguese`).
+`tests/integration/test_postgres_fulltext.py` cobre o que o store em memória deliberadamente não imita: stemming e stop words por idioma da coleção (`rates` encontra `rate` em `english`, mas não em `simple`; `banco` encontra `bancos` em `portuguese`). `tests/integration/test_migrations.py` volta para a 0002, insere um chunk, sobe de novo e prova que a migração 0003 o tornou pesquisável.
 
 ## Por que testes de contrato?
 

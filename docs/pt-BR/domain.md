@@ -103,7 +103,7 @@ Ela também guarda o seu **idioma de full-text** (`fulltext_language`, padrão `
 
 ## Recuperação — `SearchMethod` e Reciprocal Rank Fusion
 
-**O que é:** os três métodos que o laboratório compara (`vector`, `fulltext`, `hybrid`), o `ScoredChunk` que um método retorna (score maior é melhor) e `reciprocal_rank_fusion()`.
+**O que é:** as quatro estratégias que o laboratório compara (`vector`, `fulltext`, `hybrid`, `hybrid_rerank`), o `ScoredChunk` que um método retorna (score maior é melhor) e `reciprocal_rank_fusion()`.
 
 **O que a fusão faz:** a busca híbrida recebe um ranking por método e pontua cada chunk com
 

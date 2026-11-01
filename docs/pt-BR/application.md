@@ -10,9 +10,10 @@ A camada de aplicação contém os **casos de uso** (o que o sistema sabe fazer)
 |--------|-----------|
 | `services/ingestion.py` | `IngestionService`: coleções, ingestão de documentos, chunk sets |
 | `services/indexing.py` | `IndexingService`: embeddings dos chunk sets, vínculo, progresso |
-| `services/retrieval.py` | `RetrievalService`: busca vetorial, full-text e híbrida com filtros e tempos |
+| `services/retrieval.py` | `RetrievalService`: busca vetorial, full-text, híbrida e híbrida com reranking, com filtros e tempos |
 | `ports/parsing.py` | Port `DocumentParser` e sua saída `ParsedDocument` |
 | `ports/embeddings.py` | Ports `Embedder` (o modelo) e `EmbeddingRepository` (o armazenamento de vetores) |
+| `ports/reranking.py` | `Reranker`: pontua pares (pergunta, texto) |
 | `ports/search.py` | `SearchRepository`: buscas vetoriais e full-text ordenadas sobre um chunk set |
 | `ports/repositories.py` | Ports de repositório e a fronteira transacional `UnitOfWork` |
 | `errors.py` | Falhas esperadas, traduzidas em códigos HTTP pela API |
@@ -52,9 +53,9 @@ Pontos de design:
 
 | Caso de uso | Comportamento |
 |-------------|---------------|
-| `search(id, key, query, method, top_k=10, document_ids=None)` | Ordena os chunks de um chunk set e retorna um `SearchResult`: resultados (chunk, score, posição, posição por método) e tempos (`embed_ms`, `search_ms`, `total_ms`) |
+| `search(id, key, query, method, top_k=10, document_ids=None)` | Ordena os chunks de um chunk set e retorna um `SearchResult`: resultados (chunk, score, posição, posição por método) e tempos (`embed_ms`, `search_ms`, `rerank_ms`, `total_ms`) |
 
-Fluxo: validar (pergunta não vazia, `1 ≤ top_k ≤ 100`) → verificar se o chunk set existe → para `vector`/`hybrid`, verificar o vínculo de embeddings e a cobertura → gerar o embedding da pergunta → buscar → fundir (híbrida).
+Fluxo: validar (pergunta não vazia, `1 ≤ top_k ≤ 100`) → verificar se o chunk set existe → para `vector`/`hybrid`, verificar o vínculo de embeddings e a cobertura → gerar o embedding da pergunta → buscar → fundir (híbrida) → reordenar (`hybrid_rerank`).
 
 Pontos de design:
 
@@ -62,9 +63,21 @@ Pontos de design:
 - **A híbrida busca mais fundo que o `top_k`.** Cada método retorna `RETRIEVAL_CANDIDATES` (padrão 50) chunks antes da fusão, porque um chunk em 12º lugar nos dois métodos pode merecer uma posição no top 5 fundido.
 - **Tempo por etapa.** Gerar o embedding da pergunta (uma chamada de rede) e buscar (o banco) são medidos separadamente, para o benchmark mostrar de onde vem a latência. O full-text nunca chama o embedder (`embed_ms = 0`).
 - **Filtros.** `document_ids` restringe todos os métodos a esses documentos (a etapa "Filtros" do fluxo da pergunta).
+- **Reranking (`hybrid_rerank`).** Os `RERANK_CANDIDATES` (padrão 30) melhores resultados da híbrida vão para o `Reranker`, que pontua cada par (pergunta, chunk); os resultados são reordenados por esse score (empates mantêm a ordem da híbrida) e cortados em `top_k`. Cada resultado guarda `ranks["hybrid"]`, sua posição antes do reranking, então a UI mostra movimentos como "hybrid #7 → #1". O tempo do reranking é reportado em `rerank_ms`. Um reranker que retorna um número diferente de scores gera `RerankerError`.
+- **Os vetores da pergunta são validados** contra a dimensão do embedder; um tamanho errado é `EmbeddingProviderError` (502), nunca um erro do banco.
 - **Resultados explicáveis.** Cada resultado traz `ranks`, por exemplo `{"vector": 9, "fulltext": 1}` para um chunk que só o método lexical encontrou perto do topo.
 
 ## Ports
+
+### `Reranker`
+
+```python
+name: str
+def score(self, query: str, texts: Sequence[str]) -> list[float]  # um score por texto, na ordem de entrada
+```
+
+Um cross-encoder lê a pergunta e o chunk **juntos**, então julga a relevância melhor do que comparar dois embeddings calculados separadamente, ao custo de uma passada do modelo por candidato. Por isso ele só reordena uma lista curta de candidatos. As implementações lançam `RerankerError`.
+
 
 ### `DocumentParser`
 
@@ -111,8 +124,9 @@ As implementações encapsulam as falhas do provedor em `EmbeddingProviderError`
 |------|-------------|------|
 | `NotFoundError` | A entidade não existe **ou pertence a outra coleção** | 404 |
 | `ConflictError` | Nome de coleção ou chunk set duplicado; coleção vinculada a outro modelo de embeddings; busca vetorial/híbrida em um chunk set que não está totalmente indexado | 409 |
-| `InvalidRequestError` | Valores que não podem ser usados: pergunta vazia, `top_k` fora do intervalo, idioma de full-text desconhecido, nome de coleção em branco | 422 |
+| `InvalidRequestError` | Valores que não podem ser usados: `hybrid_rerank` sem reranker, pergunta vazia, `top_k` fora do intervalo, idioma de full-text desconhecido, nome de coleção em branco | 422 |
 | `EmbeddingProviderError` | A API de embeddings falhou, estava inacessível ou retornou vetores do tamanho errado | 502 |
+| `RerankerError` | O reranker não carregou (falta o extra `local-rerank`), a API dele falhou ou retornou scores malformados | 502 |
 | `UploadTooLargeError` | Arquivo maior que `MAX_UPLOAD_MB` | 413 |
 | `UnsupportedDocumentError` | A extensão não é `.pdf`, `.md`, `.markdown` ou `.txt` | 415 |
 | `DocumentParsingError` | Tipo suportado, mas ilegível (corrompido, vazio, PDF escaneado sem texto) | 422 |

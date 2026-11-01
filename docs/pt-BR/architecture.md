@@ -93,6 +93,7 @@ sequenceDiagram
     participant R as RetrievalService
     participant E as Embedder
     participant DB as SearchRepository
+    participant RR as Reranker
     C->>R: search(coleção, chunk set, pergunta, método)
     R->>DB: verifica o chunk set (+ vínculo e cobertura para vector/hybrid)
     alt vector ou hybrid
@@ -103,10 +104,14 @@ sequenceDiagram
         R->>DB: fulltext(melhores candidatos)
     end
     R->>R: reciprocal_rank_fusion (hybrid)
+    opt hybrid_rerank
+        R->>RR: score(pergunta, textos dos RERANK_CANDIDATES melhores)
+        R->>R: reordena pelo score do reranker
+    end
     R-->>C: resultados + posição por método + tempos
 ```
 
-### Perguntas e respostas (planejado, fases 4–5)
+### Perguntas e respostas (planejado, fase 5)
 
 `Pergunta → estratégia de recuperação (vetorial / full-text / híbrida) → filtros → reranking → contexto → LLM → resposta com citações`, ou abstenção quando a evidência é insuficiente.
 
