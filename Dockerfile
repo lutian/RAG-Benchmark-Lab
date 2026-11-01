@@ -27,6 +27,8 @@ COPY src ./src
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY .streamlit ./.streamlit
+# Sample corpus and golden dataset for `rag-lab demo`.
+COPY examples ./examples
 RUN uv sync --frozen --no-dev \
     $([ "$INSTALL_LOCAL_RERANKER" = "true" ] && echo "--extra local-rerank")
 
