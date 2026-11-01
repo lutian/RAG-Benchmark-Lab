@@ -27,7 +27,7 @@ Assumptions (not user-stated): a chunk is relevant when it overlaps a labelled s
 | T6 | S7 | inline | done | (docs commit) |
 
 - T1 Domain: golden question + evidence spans, relevance by overlap, Recall@k / MRR@k / hit rate, aggregation.
-- T2 Persistence: migration 0004 (golden_questions, golden_evidence, evaluation_runs), repositories, contracts.
+- T2 Persistence: migration 0004 (golden_questions, golden_evidence, benchmark_runs), repositories, contracts.
 - T3 Golden dataset service: synthetic generation (seeded passage sampling + LLM), manual add by evidence excerpt, edit/approve/reject/delete, export/import; API + Streamlit review page.
 - T4 Benchmark service: matrix run with warm-up, per-query latency and CPU time, optional generation metrics (citation validity, abstention) and LLM judge; persisted runs; API.
 - T5 CLI `rag-lab` (benchmark, export report as JSON + Markdown).

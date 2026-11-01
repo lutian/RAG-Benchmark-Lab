@@ -84,8 +84,8 @@ Todo `openai.OpenAIError`, e também um HTTP 200 com um objeto de erro no lugar 
 | `unit_of_work.py` | Uma conexão + uma transação por bloco `with` |
 | `migrations/versions/0001_reference_layer.py` | Migração Alembic que cria o schema da camada de referência |
 | `migrations/versions/0002_embeddings.py` | Habilita `vector`, adiciona as colunas de vínculo da coleção e `chunk_embeddings` |
-| `migrations/versions/0004_evaluation.py` | Adiciona `golden_questions`, `golden_evidence` e `benchmark_runs` |
 | `migrations/versions/0003_retrieval.py` | Adiciona `collections.fulltext_language` e `chunks.search_vector` (preenchido para dados existentes, índice GIN) |
+| `migrations/versions/0004_evaluation.py` | Adiciona `golden_questions`, `golden_evidence` e `benchmark_runs` |
 
 ```mermaid
 erDiagram

@@ -161,17 +161,18 @@ As metas podem ser ajustadas conforme a dificuldade do corpus e a qualidade dos 
 
 ```text
 src/rag_lab/
-  domain/            spans, documents, chunks, collections, chunking, retrieval, answers, evaluation
-  application/       services/ (ingestion, indexing, retrieval, answering, golden, benchmark),
+  domain/            spans, documentos, chunks, coleções, chunking, recuperação, respostas, avaliação
+  application/       services/ (ingestão, indexação, recuperação, respostas, golden, benchmark),
                      ports/, prompts.py, reporting.py, run_codec.py, errors.py
   adapters/
-    inbound/api/     FastAPI app, routes, schemas
-    outbound/        parsers/, persistence/ (memory, postgres), embeddings/, reranking/, generation/
-  ui/                Streamlit pages, theme, API client
-  cli.py             rag-lab command line
+    inbound/api/     app FastAPI, rotas, schemas
+    outbound/        parsers/, persistence/ (memória, postgres), embeddings/, reranking/, generation/
+  ui/                páginas Streamlit, tema, cliente da API
+  cli.py             linha de comando rag-lab
+  config.py          configurações vindas do .env
   bootstrap.py       composition root
-migrations/          Alembic revisions 0001-0004
-tests/               unit/, contracts/ (memory + PostgreSQL), integration/
-docs/en, docs/pt-BR  layer docs, configuration, testing, ADRs
-odd/tasks/           feature documents (specs, tasks, log) per phase
+migrations/          revisões Alembic 0001-0004
+tests/               unit/, contracts/ (memória + PostgreSQL), integration/
+docs/en, docs/pt-BR  documentação das camadas, configuração, testes, ADRs
+odd/tasks/           documentos de cada fase (specs, tarefas, log)
 ```

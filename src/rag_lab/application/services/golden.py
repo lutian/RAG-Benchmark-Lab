@@ -86,7 +86,10 @@ class GoldenDatasetService:
             reply = self._chat.complete(question_messages(text)).text.strip().strip('"')
             if not reply or reply.upper().startswith(SKIP):
                 continue
-            question = self._new(collection_id, reply, (evidence,), QuestionOrigin.SYNTHETIC)
+            try:
+                question = self._new(collection_id, reply, (evidence,), QuestionOrigin.SYNTHETIC)
+            except InvalidRequestError:
+                continue  # an unusable reply skips its passage, not the whole batch
             with self._uow_factory() as uow:
                 uow.golden.add(question)
                 uow.commit()
@@ -279,7 +282,9 @@ class GoldenDatasetService:
         for e in item["evidence"]:
             document = by_hash.get(e["content_hash"])
             excerpt = str(e["excerpt"])
-            if document is None or len(excerpt) > MAX_EXCERPT_CHARS:
+            if len(excerpt) > MAX_EXCERPT_CHARS:
+                raise ValueError(f"excerpt longer than {MAX_EXCERPT_CHARS} characters")
+            if document is None:
                 return None
             start, end = int(e["start"]), int(e["end"])
             if 0 <= start < end <= len(document.text) and document.text[start:end] == excerpt:

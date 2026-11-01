@@ -1,5 +1,6 @@
 """The Markdown report summarises a run against the project targets."""
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -55,8 +56,6 @@ def test_report_includes_generation_and_the_failure_diagnosis() -> None:
 
 
 def test_missed_questions_lists_questions_no_strategy_found() -> None:
-    from dataclasses import replace
-
     run = make_run()
     only_q2_vector = tuple(
         r for r in run.results if r.question_id == Q2 and r.method is SearchMethod.VECTOR
@@ -68,8 +67,6 @@ def test_missed_questions_lists_questions_no_strategy_found() -> None:
 
 
 def test_mrr_mark_only_applies_at_cut_off_10() -> None:
-    from dataclasses import replace
-
     run = make_run()
     report = markdown_report(replace(run, config=replace(run.config, mrr_cutoff=3)), "H")
 

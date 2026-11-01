@@ -178,3 +178,17 @@ def test_import_rejects_malformed_entries_and_never_keeps_stale_offsets() -> Non
         lab.service.import_(lab.collection.id, {"format_version": 1, "questions": [{"text": "Q?"}]})
     with pytest.raises(InvalidRequestError, match="#1"):
         lab.service.import_(lab.collection.id, payload(start="x"))
+
+
+def test_oversized_import_excerpts_are_rejected_and_bad_llm_replies_are_skipped() -> None:
+    lab = Lab()
+    entry = {"content_hash": lab.policy.content_hash, "filename": "p", "start": 0, "end": 1,
+             "excerpt": "x" * 20_001}  # fmt: skip
+
+    with pytest.raises(InvalidRequestError, match="longer than"):
+        lab.service.import_(
+            lab.collection.id,
+            {"format_version": 1, "questions": [{"text": "Q?", "evidence": [entry]}]},
+        )
+    blank = Lab(reply="   ")
+    assert blank.service.generate(blank.collection.id, count=2) == []

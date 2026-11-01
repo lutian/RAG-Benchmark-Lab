@@ -169,6 +169,7 @@ src/rag_lab/
     outbound/        parsers/, persistence/ (memory, postgres), embeddings/, reranking/, generation/
   ui/                Streamlit pages, theme, API client
   cli.py             rag-lab command line
+  config.py          settings from .env
   bootstrap.py       composition root
 migrations/          Alembic revisions 0001-0004
 tests/               unit/, contracts/ (memory + PostgreSQL), integration/

@@ -84,8 +84,8 @@ Every `openai.OpenAIError`, and an HTTP 200 carrying an error object instead of 
 | `unit_of_work.py` | One connection + one transaction per `with` block |
 | `migrations/versions/0001_reference_layer.py` | Alembic migration creating the reference-layer schema |
 | `migrations/versions/0002_embeddings.py` | Enables `vector`, adds the collection binding columns and `chunk_embeddings` |
-| `migrations/versions/0004_evaluation.py` | Adds `golden_questions`, `golden_evidence` and `benchmark_runs` |
 | `migrations/versions/0003_retrieval.py` | Adds `collections.fulltext_language` and `chunks.search_vector` (backfilled, GIN index) |
+| `migrations/versions/0004_evaluation.py` | Adds `golden_questions`, `golden_evidence` and `benchmark_runs` |
 
 ```mermaid
 erDiagram
