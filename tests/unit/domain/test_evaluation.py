@@ -164,3 +164,49 @@ def test_locate_excerpt_matches_across_whitespace_differences() -> None:
     assert locate_excerpt(text, "issued within 14 days") == Span(12, 34)
     assert locate_excerpt(text, "issued (within)") is None
     assert locate_excerpt(text, "   ") is None
+
+
+def test_head_to_head_counts_per_question_wins_by_reciprocal_rank() -> None:
+    from rag_lab.domain.evaluation import head_to_head
+
+    q1, q2, q3 = uuid4(), uuid4(), uuid4()
+
+    def row(question: object, method: SearchMethod, rr: float) -> QueryResult:
+        return QueryResult(question, "cs", method, {5: 0.0}, rr, None, 1.0, 1.0)  # type: ignore[arg-type]
+
+    results = [
+        row(q1, SearchMethod.VECTOR, 1.0), row(q1, SearchMethod.FULLTEXT, 0.5),
+        row(q2, SearchMethod.VECTOR, 0.0), row(q2, SearchMethod.FULLTEXT, 1.0),
+        row(q3, SearchMethod.VECTOR, 0.5), row(q3, SearchMethod.FULLTEXT, 0.5),
+    ]  # fmt: skip
+
+    duel = head_to_head(results, "cs", SearchMethod.FULLTEXT, SearchMethod.VECTOR)
+
+    assert duel is not None
+    assert (duel.first_wins, duel.second_wins, duel.ties) == (1, 1, 1)
+    assert head_to_head(results, "cs", SearchMethod.HYBRID, SearchMethod.VECTOR) is None
+
+
+def test_failures_are_attributed_to_retrieval_or_generation() -> None:
+    from rag_lab.domain.evaluation import diagnose_failures
+
+    def row(rank: int | None, **extra: object) -> QueryResult:
+        return QueryResult(
+            uuid4(), "cs", SearchMethod.HYBRID, {5: 0.0}, 0.0, rank, 1.0, 1.0, **extra
+        )  # type: ignore[arg-type]
+
+    results = [
+        row(1, abstained=False, citations_valid=True, supported=True),  # good answer
+        row(None, abstained=True),  # evidence never retrieved
+        row(9, abstained=False, citations_valid=True, supported=False),  # retrieved too late
+        row(2, abstained=False, citations_valid=False),  # evidence shown, bad citations
+        row(3),  # no generation in this row
+    ]
+
+    diagnosis = diagnose_failures(results, answer_top_k=5)
+
+    assert (diagnosis.bad_answers, diagnosis.retrieval_misses, diagnosis.generation_errors) == (
+        3,
+        2,
+        1,
+    )

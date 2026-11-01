@@ -26,8 +26,8 @@ from sqlalchemy.dialects.postgresql import REGCONFIG, TSQUERY
 from sqlalchemy.exc import IntegrityError
 
 from rag_lab.adapters.outbound.persistence.postgres import tables as t
-from rag_lab.adapters.outbound.persistence.run_codec import run_from_payload, run_to_payload
 from rag_lab.application.errors import ConflictError
+from rag_lab.application.run_codec import run_from_payload, run_to_payload
 from rag_lab.domain.chunking import ChunkingConfig, ChunkingStrategy
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection

@@ -57,3 +57,33 @@ Reply with the question only."""
 
 def question_messages(passage: str) -> list[ChatMessage]:
     return [ChatMessage("system", QUESTION_PROMPT), ChatMessage("user", f"Passage:\n{passage}")]
+
+
+SUPPORTED, UNSUPPORTED = "SUPPORTED", "UNSUPPORTED"
+
+JUDGE_PROMPT = f"""You check whether an answer is supported by the sources it was written from.
+
+Reply with exactly one word first, {SUPPORTED} or {UNSUPPORTED}, then one short sentence.
+
+{SUPPORTED}: every factual statement in the answer is stated or directly implied by the \
+numbered sources.
+{UNSUPPORTED}: at least one statement is missing from, or contradicts, the sources."""
+
+
+def judge_messages(question: str, answer: str, sources: Sequence[Chunk]) -> list[ChatMessage]:
+    blocks = [f"[{n}]\n{chunk.text}" for n, chunk in enumerate(sources, start=1)]
+    user = (
+        "Sources:\n\n" + "\n\n".join(blocks) + f"\n\nQuestion: {question}\n\n"
+        f"Answer to check:\n{answer}"
+    )
+    return [ChatMessage("system", JUDGE_PROMPT), ChatMessage("user", user)]
+
+
+def parse_verdict(reply: str) -> bool | None:
+    """True for SUPPORTED, False for UNSUPPORTED, None when the reply is neither."""
+    first = reply.strip().lstrip("*_#>`\"' ").upper()
+    if first.startswith(UNSUPPORTED):
+        return False
+    if first.startswith(SUPPORTED):
+        return True
+    return None

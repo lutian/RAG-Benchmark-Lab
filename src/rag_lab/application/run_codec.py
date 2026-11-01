@@ -1,4 +1,5 @@
-"""JSON encoding of benchmark runs (stored as one JSONB document, exported as files).
+"""JSON encoding of benchmark runs: stored as one JSONB document, served by the API and
+written by the CLI, so every consumer reads the same versioned format.
 
 Kept explicit instead of ``dataclasses.asdict`` so the stored format is visible and
 versioned: JSON object keys are strings, so ``recall`` keys (k) are converted back.

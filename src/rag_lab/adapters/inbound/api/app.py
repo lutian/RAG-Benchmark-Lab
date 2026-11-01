@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from rag_lab.adapters.inbound.api.routes import (
     answering,
+    benchmarks,
     collections,
     golden,
     indexing,
@@ -72,4 +73,5 @@ def create_app(container: Container | None = None) -> FastAPI:
     app.include_router(retrieval.router)
     app.include_router(answering.router)
     app.include_router(golden.router)
+    app.include_router(benchmarks.router)
     return app

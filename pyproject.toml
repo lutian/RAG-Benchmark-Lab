@@ -20,6 +20,9 @@ dependencies = [
     "pgvector>=0.3",
 ]
 
+[project.scripts]
+rag-lab = "rag_lab.cli:main"
+
 [project.optional-dependencies]
 # Local cross-encoder reranker (RERANKER_PROVIDER=local). Pulls in torch (CPU build on Linux).
 local-rerank = [

@@ -20,6 +20,7 @@ from rag_lab.application.ports.generation import ChatModel
 from rag_lab.application.ports.repositories import UnitOfWork
 from rag_lab.application.ports.reranking import Reranker
 from rag_lab.application.services.answering import AnswerService
+from rag_lab.application.services.benchmark import BenchmarkService
 from rag_lab.application.services.golden import GoldenDatasetService
 from rag_lab.application.services.indexing import IndexingService
 from rag_lab.application.services.ingestion import IngestionService
@@ -36,6 +37,7 @@ class Container:
     retrieval: RetrievalService
     answering: AnswerService
     golden: GoldenDatasetService
+    benchmark: BenchmarkService
     default_chunking_configs: tuple[ChunkingConfig, ...]
 
 
@@ -80,6 +82,18 @@ def build_reranker(settings: Settings) -> Reranker:
             timeout_seconds=settings.llm_timeout_seconds,
         )
     return CrossEncoderReranker(settings.reranker_model)
+
+
+def environment(settings: Settings, reranker: Reranker, chat: ChatModel) -> dict[str, str]:
+    """Models and retrieval settings recorded with every benchmark run."""
+    generation = ", ".join(f"{k}={v}" for k, v in settings.llm_generation_options().items())
+    return {
+        "embedding": f"{settings.embedding_model} ({settings.embedding_dimensions}d)",
+        "reranker": f"{settings.reranker_provider}: {reranker.name}",
+        "llm": chat.name + (f" ({generation})" if generation else ""),
+        "hybrid": f"RRF k={settings.hybrid_rrf_k}, {settings.retrieval_candidates} candidates",
+        "rerank_candidates": str(settings.rerank_candidates),
+    }
 
 
 def build_container(settings: Settings) -> Container:
@@ -136,6 +150,13 @@ def _assemble(
     )
     answering = AnswerService(retrieval=retrieval, chat=chat)
     golden = GoldenDatasetService(uow_factory=uow_factory, chat=chat)
+    benchmark = BenchmarkService(
+        uow_factory=uow_factory,
+        retrieval=retrieval,
+        answering=answering,
+        chat=chat,
+        environment=environment(settings, reranker, chat),
+    )
     return Container(
         settings,
         ingestion,
@@ -143,5 +164,6 @@ def _assemble(
         retrieval,
         answering,
         golden,
+        benchmark,
         default_chunking_configs(settings),
     )

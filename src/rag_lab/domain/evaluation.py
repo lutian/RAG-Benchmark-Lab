@@ -254,3 +254,55 @@ def locate_excerpt(text: str, excerpt: str) -> Span | None:
     pattern = r"\s+".join(re.escape(word) for word in words)
     match = re.search(pattern, text)
     return Span(match.start(), match.end()) if match else None
+
+
+@dataclass(frozen=True, slots=True)
+class HeadToHead:
+    """Per-question comparison of two methods on one chunk set, by reciprocal rank."""
+
+    first: SearchMethod
+    second: SearchMethod
+    first_wins: int
+    second_wins: int
+    ties: int
+
+
+def head_to_head(
+    results: Sequence[QueryResult], chunk_set: str, first: SearchMethod, second: SearchMethod
+) -> HeadToHead | None:
+    """How often ``first`` ranked the evidence higher than ``second`` (None if one is missing)."""
+    by_question: dict[UUID, dict[SearchMethod, float]] = {}
+    for r in results:
+        if r.chunk_set == chunk_set and r.method in (first, second):
+            by_question.setdefault(r.question_id, {})[r.method] = r.reciprocal_rank
+    pairs = [(q[first], q[second]) for q in by_question.values() if len(q) == 2]
+    if not pairs:
+        return None
+    return HeadToHead(
+        first,
+        second,
+        first_wins=sum(a > b for a, b in pairs),
+        second_wins=sum(b > a for a, b in pairs),
+        ties=sum(a == b for a, b in pairs),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class FailureDiagnosis:
+    """Bad answers split by cause: was the evidence among the sources the LLM saw?"""
+
+    bad_answers: int
+    retrieval_misses: int  # evidence not in the top answer_top_k: a retrieval problem
+    generation_errors: int  # evidence was there: the generation went wrong
+
+
+def diagnose_failures(results: Sequence[QueryResult], answer_top_k: int) -> FailureDiagnosis:
+    """A bad answer is an abstention, invalid citations, or a judge verdict of unsupported."""
+    bad = [
+        r
+        for r in results
+        if r.abstained is not None
+        and (r.abstained or r.citations_valid is False or r.supported is False)
+    ]
+    misses = sum(r.first_relevant_rank is None or r.first_relevant_rank > answer_top_k for r in bad)
+    return FailureDiagnosis(len(bad), misses, len(bad) - misses)

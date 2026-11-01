@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from rag_lab.application.run_codec import run_to_payload
 from rag_lab.application.services.answering import Answer
 from rag_lab.application.services.golden import GoldenQuestionView, ImportReport
 from rag_lab.application.services.indexing import IndexingReport, IndexStatus
@@ -16,7 +17,12 @@ from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
 from rag_lab.domain.embeddings import EmbeddingSpec
-from rag_lab.domain.evaluation import QuestionOrigin, QuestionStatus
+from rag_lab.domain.evaluation import (
+    BenchmarkConfig,
+    BenchmarkRun,
+    QuestionOrigin,
+    QuestionStatus,
+)
 from rag_lab.domain.retrieval import SearchMethod
 
 
@@ -435,3 +441,81 @@ class ImportReportOut(BaseModel):
     @classmethod
     def from_report(cls, report: ImportReport) -> "ImportReportOut":
         return cls(imported=report.imported, skipped=report.skipped)
+
+
+class BenchmarkIn(BaseModel):
+    chunk_sets: list[str] | None = Field(default=None, description="Default: every chunk set.")
+    methods: list[SearchMethod] | None = Field(default=None, description="Default: all four.")
+    ks: list[int] = Field(default=[1, 5, 10], min_length=1)
+    mrr_cutoff: int = Field(default=10, ge=1, le=100)
+    generation: bool = Field(
+        default=False,
+        description="Also answer every question with every strategy (one LLM call each).",
+    )
+    judge: bool = Field(
+        default=False, description="LLM judge of answer support (needs generation)."
+    )
+    answer_top_k: int = Field(default=5, ge=1, le=MAX_TOP_K)
+
+    def to_config(self, all_chunk_sets: list[str]) -> BenchmarkConfig:
+        return BenchmarkConfig(
+            chunk_sets=tuple(self.chunk_sets or all_chunk_sets),
+            methods=tuple(self.methods or list(SearchMethod)),
+            ks=tuple(sorted(set(self.ks))),
+            mrr_cutoff=self.mrr_cutoff,
+            generation=self.generation,
+            judge=self.judge,
+            answer_top_k=self.answer_top_k,
+        )
+
+
+class StrategySummaryOut(BaseModel):
+    chunk_set: str
+    method: SearchMethod
+    questions: int
+    recall: dict[int, float]
+    mrr: float
+    latency_p50_ms: float
+    latency_p95_ms: float
+    cpu_ms_mean: float
+    abstention_rate: float | None
+    citation_valid_rate: float | None
+    supported_rate: float | None
+    tokens: int | None
+
+
+class BenchmarkRunOut(BaseModel):
+    id: UUID
+    created_at: datetime
+    question_count: int
+    config: dict[str, object]
+    environment: dict[str, str]
+    summaries: list[StrategySummaryOut]
+
+    @classmethod
+    def from_run(cls, run: BenchmarkRun) -> "BenchmarkRunOut":
+        payload = run_to_payload(run)
+        return cls(
+            id=run.id,
+            created_at=run.created_at,
+            question_count=run.question_count,
+            config=payload["config"],
+            environment=run.environment,
+            summaries=[
+                StrategySummaryOut(
+                    chunk_set=s.chunk_set,
+                    method=s.method,
+                    questions=s.questions,
+                    recall=s.recall,
+                    mrr=s.mrr,
+                    latency_p50_ms=s.latency_p50_ms,
+                    latency_p95_ms=s.latency_p95_ms,
+                    cpu_ms_mean=s.cpu_ms_mean,
+                    abstention_rate=s.abstention_rate,
+                    citation_valid_rate=s.citation_valid_rate,
+                    supported_rate=s.supported_rate,
+                    tokens=s.tokens,
+                )
+                for s in run.summaries
+            ],
+        )
