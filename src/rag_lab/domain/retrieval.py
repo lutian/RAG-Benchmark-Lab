@@ -18,6 +18,8 @@ class SearchMethod(StrEnum):
     VECTOR = "vector"
     FULLTEXT = "fulltext"
     HYBRID = "hybrid"
+    # Hybrid candidates reordered by a cross-encoder (or a /rerank API).
+    HYBRID_RERANK = "hybrid_rerank"
 
 
 @dataclass(frozen=True, slots=True)

@@ -31,3 +31,7 @@ class EmbeddingProviderError(RagLabError):
 
 class InvalidRequestError(RagLabError):
     """The request is well-formed but its values cannot be used (e.g. a blank query)."""
+
+
+class RerankerError(RagLabError):
+    """The reranker failed (model not installed, API unreachable, malformed response)."""

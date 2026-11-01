@@ -3,7 +3,7 @@
 import hashlib
 from collections.abc import Sequence
 
-from rag_lab.application.errors import EmbeddingProviderError
+from rag_lab.application.errors import EmbeddingProviderError, RerankerError
 from rag_lab.domain.embeddings import EmbeddingSpec
 
 
@@ -72,3 +72,22 @@ class ConceptEmbedder:
             if word in self._concepts:
                 vector[self._concepts[word]] += 1.0
         return vector
+
+
+class FakeReranker:
+    """Scores 1.0 for texts containing ``prefer`` and 0.0 otherwise; records every call."""
+
+    def __init__(self, prefer: str = "", fail: bool = False) -> None:
+        self._prefer = prefer.lower()
+        self._fail = fail
+        self.calls: list[tuple[str, list[str]]] = []
+
+    @property
+    def name(self) -> str:
+        return "fake-reranker"
+
+    def score(self, query: str, texts: Sequence[str]) -> list[float]:
+        self.calls.append((query, list(texts)))
+        if self._fail:
+            raise RerankerError("fake reranker outage")
+        return [1.0 if self._prefer and self._prefer in t.lower() else 0.0 for t in texts]

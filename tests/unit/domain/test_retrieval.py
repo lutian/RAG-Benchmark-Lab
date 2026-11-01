@@ -25,8 +25,8 @@ def chunk(index: int) -> Chunk:
     )
 
 
-def test_search_methods_are_the_three_retrieval_strategies() -> None:
-    assert [m.value for m in SearchMethod] == ["vector", "fulltext", "hybrid"]
+def test_search_methods_are_the_four_compared_strategies() -> None:
+    assert [m.value for m in SearchMethod] == ["vector", "fulltext", "hybrid", "hybrid_rerank"]
 
 
 def test_fusion_rewards_chunks_ranked_high_by_both_methods() -> None:

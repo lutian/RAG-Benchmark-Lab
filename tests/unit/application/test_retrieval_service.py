@@ -6,13 +6,19 @@ import pytest
 
 from rag_lab.adapters.outbound.parsers.registry import ParserRegistry
 from rag_lab.adapters.outbound.persistence.memory import InMemoryUnitOfWork
-from rag_lab.application.errors import ConflictError, InvalidRequestError, NotFoundError
+from rag_lab.application.errors import (
+    ConflictError,
+    EmbeddingProviderError,
+    InvalidRequestError,
+    NotFoundError,
+    RerankerError,
+)
 from rag_lab.application.services.indexing import IndexingService
 from rag_lab.application.services.ingestion import IngestionService
 from rag_lab.application.services.retrieval import RetrievalService
 from rag_lab.domain.chunking import ChunkingConfig, ChunkingStrategy
 from rag_lab.domain.retrieval import SearchMethod
-from tests.fakes import ConceptEmbedder
+from tests.fakes import ConceptEmbedder, FakeReranker
 
 CONFIG = ChunkingConfig(ChunkingStrategy.FIXED, 200, 0)
 CONCEPTS = {
@@ -30,7 +36,8 @@ DOCS = {
 
 
 class Lab:
-    def __init__(self) -> None:
+    def __init__(self, reranker: FakeReranker | None = None) -> None:
+        self.reranker = reranker
         self.uow = InMemoryUnitOfWork()
         self.embedder = ConceptEmbedder(CONCEPTS, dimensions=5)
         self.ingestion = IngestionService(uow_factory=lambda: self.uow, parser=ParserRegistry())
@@ -40,7 +47,12 @@ class Lab:
             for name, data in DOCS.items()
         }
         self.retrieval = RetrievalService(
-            uow_factory=lambda: self.uow, embedder=self.embedder, candidates=10, rrf_k=60
+            uow_factory=lambda: self.uow,
+            embedder=self.embedder,
+            candidates=10,
+            rrf_k=60,
+            reranker=reranker,
+            rerank_candidates=2,
         )
 
     def index(self) -> None:
@@ -146,3 +158,75 @@ def test_blank_query_and_bad_top_k_are_rejected(lab: Lab) -> None:
         lab.search("   ", SearchMethod.FULLTEXT)
     with pytest.raises(InvalidRequestError, match="top_k"):
         lab.search("car", SearchMethod.FULLTEXT, top_k=0)
+
+
+def reranking_lab(reranker: FakeReranker) -> Lab:
+    lab = Lab(reranker)
+    lab.index()
+    return lab
+
+
+def test_rerank_reorders_hybrid_candidates_and_keeps_the_hybrid_rank() -> None:
+    lab = reranking_lab(FakeReranker(prefer="river"))
+
+    hybrid = lab.search("bank savings", SearchMethod.HYBRID)
+    result = lab.retrieval.search(
+        lab.collection.id, CONFIG.key, "bank savings", SearchMethod.HYBRID_RERANK
+    )
+
+    assert hybrid[:2] == [lab.documents["money.txt"], lab.documents["river.txt"]]
+    top = result.hits[0]
+    assert top.chunk.document_id == lab.documents["river.txt"]
+    assert top.score == 1.0
+    assert top.ranks["hybrid"] == 2
+    assert {"vector", "fulltext"} <= set(top.ranks)
+    assert result.timings.rerank_ms >= 0
+
+
+def test_reranker_only_sees_the_configured_number_of_candidates() -> None:
+    reranker = FakeReranker(prefer="river")
+    lab = reranking_lab(reranker)
+
+    result = lab.retrieval.search(
+        lab.collection.id, CONFIG.key, "bank savings", SearchMethod.HYBRID_RERANK, top_k=1
+    )
+
+    [(query, texts)] = reranker.calls
+    assert query == "bank savings"
+    assert len(texts) == 2
+    assert len(result.hits) == 1
+
+
+def test_other_methods_do_not_call_the_reranker() -> None:
+    reranker = FakeReranker(prefer="river")
+    lab = reranking_lab(reranker)
+
+    result = lab.retrieval.search(lab.collection.id, CONFIG.key, "bank", SearchMethod.HYBRID)
+
+    assert reranker.calls == []
+    assert result.timings.rerank_ms == 0
+
+
+def test_reranker_failures_propagate() -> None:
+    lab = reranking_lab(FakeReranker(fail=True))
+
+    with pytest.raises(RerankerError, match="outage"):
+        lab.search("bank", SearchMethod.HYBRID_RERANK)
+
+
+def test_rerank_without_a_configured_reranker_is_rejected(lab: Lab) -> None:
+    with pytest.raises(InvalidRequestError, match="reranker"):
+        lab.search("bank", SearchMethod.HYBRID_RERANK)
+
+
+def test_query_vector_of_the_wrong_dimension_is_a_provider_error(lab: Lab) -> None:
+    class ShortQueries(ConceptEmbedder):
+        def embed_query(self, text: str) -> list[float]:
+            return [1.0, 0.0]
+
+    lab.retrieval = RetrievalService(
+        uow_factory=lambda: lab.uow, embedder=ShortQueries(CONCEPTS, dimensions=5)
+    )
+
+    with pytest.raises(EmbeddingProviderError, match="dimension 2"):
+        lab.search("car", SearchMethod.VECTOR)
