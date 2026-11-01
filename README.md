@@ -27,6 +27,7 @@ git clone https://github.com/lutian/RAG-Benchmark-Lab.git
 cd RAG-Benchmark-Lab
 cp .env.example .env            # set POSTGRES_PASSWORD and your provider keys
 docker compose up --build -d
+make compose-smoke              # optional: checks the stack end to end, no provider key needed
 ```
 
 | Service | URL |

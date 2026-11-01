@@ -69,3 +69,5 @@ Testes por exemplos cobrem os casos em que pensamos. Os bugs de chunking se esco
 ## CI
 
 `.github/workflows/ci.yml` roda em todo push e PR: `uv sync --frozen` → ruff (lint + checagem de formatação) → mypy strict → pytest com cobertura, contra um container de serviço `pgvector/pgvector:pg17`. Por isso, no CI, os testes de contrato sempre rodam contra um PostgreSQL real.
+
+`.github/workflows/docker.yml` verifica o caminho de entrega que os testes não enxergam: monta a imagem com as configurações padrão (com o cross-encoder local), sobe `db`, `api` e `ui` com `docker compose up --wait`, confere que o reranker está instalado e que o container da UI alcança a API pela rede do Compose, e então roda `scripts/compose_smoke.py`. O smoke test cria uma coleção (o que prova que as migrations rodaram no `db`), envia um documento de exemplo, espera que a busca full-text coloque o chunk de "Final Sale" em primeiro lugar e confere o endpoint de saúde do Streamlit. A busca full-text é proposital: não precisa de chave de provedor, então o job roda em todo PR sem secrets. Para rodar a mesma verificação localmente: `make compose-smoke` (precisa de um `.env`).

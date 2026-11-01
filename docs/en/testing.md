@@ -69,3 +69,5 @@ Example-based tests check the cases we thought of. Chunking bugs hide in the cas
 ## CI
 
 `.github/workflows/ci.yml` runs on every push and PR: `uv sync --frozen` → ruff (lint + format check) → mypy strict → pytest with coverage, against a `pgvector/pgvector:pg17` service container. Contract tests therefore always run against real PostgreSQL in CI.
+
+`.github/workflows/docker.yml` checks the delivery path the tests cannot see: it builds the image with the default settings (local cross-encoder included), starts `db`, `api` and `ui` with `docker compose up --wait`, checks that the reranker is installed and that the UI container reaches the API over the Compose network, then runs `scripts/compose_smoke.py`. The smoke test creates a collection (proving the migrations ran against `db`), uploads a sample document, expects full-text search to rank the "Final Sale" chunk first, and checks the Streamlit health endpoint. It uses full-text search on purpose: it needs no provider key, so the job runs on every PR without secrets. Run the same check locally with `make compose-smoke` (needs a `.env`).
