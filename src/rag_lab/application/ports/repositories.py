@@ -12,6 +12,7 @@ from rag_lab.application.ports.search import SearchRepository
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
+from rag_lab.domain.evaluation import BenchmarkRun, GoldenQuestion, QuestionStatus
 
 
 class CollectionRepository(Protocol):
@@ -45,6 +46,30 @@ class ChunkRepository(Protocol):
     def count(self, collection_id: UUID, config_key: str) -> int: ...
 
 
+class GoldenQuestionRepository(Protocol):
+    def add(self, question: GoldenQuestion) -> None: ...
+    def update(self, question: GoldenQuestion) -> None:
+        """Persist text and status changes (evidence is immutable)."""
+        ...
+
+    def get(self, collection_id: UUID, question_id: UUID) -> GoldenQuestion | None: ...
+    def list(
+        self, collection_id: UUID, status: QuestionStatus | None = None
+    ) -> list[GoldenQuestion]:
+        """Questions of the collection, oldest first."""
+        ...
+
+    def delete(self, collection_id: UUID, question_id: UUID) -> bool: ...
+
+
+class BenchmarkRunRepository(Protocol):
+    def add(self, run: BenchmarkRun) -> None: ...
+    def get(self, collection_id: UUID, run_id: UUID) -> BenchmarkRun | None: ...
+    def list(self, collection_id: UUID) -> list[BenchmarkRun]:
+        """Runs of the collection, newest first."""
+        ...
+
+
 class UnitOfWork(Protocol):
     """Transaction boundary: changes are visible only after :meth:`commit`.
 
@@ -61,6 +86,10 @@ class UnitOfWork(Protocol):
     def embeddings(self) -> EmbeddingRepository: ...
     @property
     def search(self) -> SearchRepository: ...
+    @property
+    def golden(self) -> GoldenQuestionRepository: ...
+    @property
+    def runs(self) -> BenchmarkRunRepository: ...
 
     def __enter__(self) -> Self: ...
 

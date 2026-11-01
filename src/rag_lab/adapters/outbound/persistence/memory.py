@@ -16,6 +16,7 @@ from uuid import UUID
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document
+from rag_lab.domain.evaluation import BenchmarkRun, GoldenQuestion, QuestionStatus
 from rag_lab.domain.retrieval import ScoredChunk
 
 ChunkKey = tuple[UUID, str, UUID]
@@ -28,6 +29,8 @@ class _State:
     documents: dict[UUID, Document] = field(default_factory=dict)
     chunks: dict[ChunkKey, list[Chunk]] = field(default_factory=dict)
     vectors: dict[VectorKey, tuple[str, list[float]]] = field(default_factory=dict)
+    golden: dict[UUID, GoldenQuestion] = field(default_factory=dict)
+    runs: dict[UUID, BenchmarkRun] = field(default_factory=dict)
 
     def copy(self) -> "_State":
         return _State(
@@ -35,6 +38,8 @@ class _State:
             dict(self.documents),
             {key: list(value) for key, value in self.chunks.items()},
             dict(self.vectors),
+            dict(self.golden),
+            dict(self.runs),
         )
 
 
@@ -208,6 +213,55 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     return sum(x * y for x, y in zip(a, b, strict=True)) / norm if norm else 0.0
 
 
+class InMemoryGoldenQuestionRepository:
+    def __init__(self, state: _State) -> None:
+        self._state = state
+
+    def add(self, question: GoldenQuestion) -> None:
+        self._state.golden[question.id] = question
+
+    def update(self, question: GoldenQuestion) -> None:
+        self._state.golden[question.id] = question
+
+    def get(self, collection_id: UUID, question_id: UUID) -> GoldenQuestion | None:
+        question = self._state.golden.get(question_id)
+        return question if question and question.collection_id == collection_id else None
+
+    def list(
+        self, collection_id: UUID, status: QuestionStatus | None = None
+    ) -> list[GoldenQuestion]:
+        return sorted(
+            (
+                q
+                for q in self._state.golden.values()
+                if q.collection_id == collection_id and (status is None or q.status == status)
+            ),
+            key=lambda q: (q.created_at, str(q.id)),
+        )
+
+    def delete(self, collection_id: UUID, question_id: UUID) -> bool:
+        if self.get(collection_id, question_id) is None:
+            return False
+        del self._state.golden[question_id]
+        return True
+
+
+class InMemoryBenchmarkRunRepository:
+    def __init__(self, state: _State) -> None:
+        self._state = state
+
+    def add(self, run: BenchmarkRun) -> None:
+        self._state.runs[run.id] = run
+
+    def get(self, collection_id: UUID, run_id: UUID) -> BenchmarkRun | None:
+        run = self._state.runs.get(run_id)
+        return run if run and run.collection_id == collection_id else None
+
+    def list(self, collection_id: UUID) -> list[BenchmarkRun]:
+        runs = [r for r in self._state.runs.values() if r.collection_id == collection_id]
+        return sorted(runs, key=lambda r: r.created_at, reverse=True)
+
+
 class InMemoryUnitOfWork:
     """Keeps a committed state; each ``with`` block works on a copy until commit."""
 
@@ -222,6 +276,8 @@ class InMemoryUnitOfWork:
         self.chunks = InMemoryChunkRepository(state)
         self.embeddings = InMemoryEmbeddingRepository(state)
         self.search = InMemorySearchRepository(state)
+        self.golden = InMemoryGoldenQuestionRepository(state)
+        self.runs = InMemoryBenchmarkRunRepository(state)
 
     def __enter__(self) -> Self:
         self._bind(self._committed.copy())

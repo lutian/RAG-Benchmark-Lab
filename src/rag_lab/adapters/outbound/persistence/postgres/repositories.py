@@ -1,5 +1,6 @@
 """Repository implementations over a SQLAlchemy connection owned by the unit of work."""
 
+import builtins
 from collections.abc import Sequence, Set
 from typing import Any
 from uuid import UUID
@@ -25,12 +26,20 @@ from sqlalchemy.dialects.postgresql import REGCONFIG, TSQUERY
 from sqlalchemy.exc import IntegrityError
 
 from rag_lab.adapters.outbound.persistence.postgres import tables as t
+from rag_lab.adapters.outbound.persistence.run_codec import run_from_payload, run_to_payload
 from rag_lab.application.errors import ConflictError
 from rag_lab.domain.chunking import ChunkingConfig, ChunkingStrategy
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
 from rag_lab.domain.documents import Document, ElementKind, MediaType, StructuralElement
 from rag_lab.domain.embeddings import EmbeddingSpec
+from rag_lab.domain.evaluation import (
+    BenchmarkRun,
+    Evidence,
+    GoldenQuestion,
+    QuestionOrigin,
+    QuestionStatus,
+)
 from rag_lab.domain.retrieval import ScoredChunk
 from rag_lab.domain.spans import Span
 
@@ -473,3 +482,133 @@ class PostgresSearchRepository:
             query = query.where(condition)
         rows = self._connection.execute(query.limit(limit))
         return [ScoredChunk(_chunk_from_row(row), float(row.score)) for row in rows]
+
+
+class PostgresGoldenQuestionRepository:
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def add(self, question: GoldenQuestion) -> None:
+        _write(
+            self._connection,
+            insert(t.golden_questions).values(
+                id=question.id,
+                collection_id=question.collection_id,
+                text=question.text,
+                origin=question.origin.value,
+                status=question.status.value,
+                created_at=question.created_at,
+            ),
+        )
+        _write(
+            self._connection,
+            insert(t.golden_evidence),
+            [
+                {
+                    "question_id": question.id,
+                    "position": position,
+                    "document_id": evidence.document_id,
+                    "start_offset": evidence.span.start,
+                    "end_offset": evidence.span.end,
+                }
+                for position, evidence in enumerate(question.evidence)
+            ],
+        )
+
+    def update(self, question: GoldenQuestion) -> None:
+        self._connection.execute(
+            update(t.golden_questions)
+            .where(
+                t.golden_questions.c.id == question.id,
+                t.golden_questions.c.collection_id == question.collection_id,
+            )
+            .values(text=question.text, status=question.status.value)
+        )
+
+    def get(self, collection_id: UUID, question_id: UUID) -> GoldenQuestion | None:
+        found = self._select(collection_id, [t.golden_questions.c.id == question_id])
+        return found[0] if found else None
+
+    def list(
+        self, collection_id: UUID, status: QuestionStatus | None = None
+    ) -> list[GoldenQuestion]:
+        conditions = [] if status is None else [t.golden_questions.c.status == status.value]
+        return self._select(collection_id, conditions)
+
+    def delete(self, collection_id: UUID, question_id: UUID) -> bool:
+        result = self._connection.execute(
+            delete(t.golden_questions).where(
+                t.golden_questions.c.id == question_id,
+                t.golden_questions.c.collection_id == collection_id,
+            )
+        )
+        return bool(result.rowcount)
+
+    def _select(
+        self, collection_id: UUID, conditions: "builtins.list[ColumnElement[bool]]"
+    ) -> "builtins.list[GoldenQuestion]":
+        rows = self._connection.execute(
+            select(t.golden_questions)
+            .where(t.golden_questions.c.collection_id == collection_id, *conditions)
+            .order_by(t.golden_questions.c.created_at, t.golden_questions.c.id)
+        ).all()
+        if not rows:
+            return []
+        evidence: dict[UUID, builtins.list[Evidence]] = {}
+        for e in self._connection.execute(
+            select(t.golden_evidence)
+            .where(t.golden_evidence.c.question_id.in_([row.id for row in rows]))
+            .order_by(t.golden_evidence.c.question_id, t.golden_evidence.c.position)
+        ):
+            evidence.setdefault(e.question_id, []).append(
+                Evidence(e.document_id, Span(e.start_offset, e.end_offset))
+            )
+        return [
+            GoldenQuestion(
+                id=row.id,
+                collection_id=row.collection_id,
+                text=row.text,
+                evidence=tuple(evidence.get(row.id, ())),
+                origin=QuestionOrigin(row.origin),
+                status=QuestionStatus(row.status),
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
+
+
+class PostgresBenchmarkRunRepository:
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def add(self, run: BenchmarkRun) -> None:
+        _write(
+            self._connection,
+            insert(t.benchmark_runs).values(
+                id=run.id,
+                collection_id=run.collection_id,
+                created_at=run.created_at,
+                payload=run_to_payload(run),
+            ),
+        )
+
+    def get(self, collection_id: UUID, run_id: UUID) -> BenchmarkRun | None:
+        row = self._connection.execute(
+            select(t.benchmark_runs).where(
+                t.benchmark_runs.c.id == run_id,
+                t.benchmark_runs.c.collection_id == collection_id,
+            )
+        ).first()
+        return (
+            run_from_payload(row.id, row.collection_id, row.created_at, row.payload)
+            if row
+            else None
+        )
+
+    def list(self, collection_id: UUID) -> list[BenchmarkRun]:
+        rows = self._connection.execute(
+            select(t.benchmark_runs)
+            .where(t.benchmark_runs.c.collection_id == collection_id)
+            .order_by(t.benchmark_runs.c.created_at.desc(), t.benchmark_runs.c.id)
+        )
+        return [run_from_payload(r.id, r.collection_id, r.created_at, r.payload) for r in rows]

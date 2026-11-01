@@ -145,3 +145,58 @@ chunk_embeddings = Table(
     CheckConstraint("vector_dims(embedding) = dimensions", name="ck_embedding_dims"),
     Index("ix_chunk_embeddings_chunk_set", "collection_id", "config_key"),
 )
+
+golden_questions = Table(
+    "golden_questions",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column(
+        "collection_id",
+        Uuid,
+        ForeignKey("collections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column("text", Text, nullable=False),
+    Column("origin", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+# Evidence spans point at the reference layer (document + offsets), never at chunks.
+golden_evidence = Table(
+    "golden_evidence",
+    metadata,
+    Column(
+        "question_id",
+        Uuid,
+        ForeignKey("golden_questions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("position", Integer, primary_key=True),
+    Column(
+        "document_id",
+        Uuid,
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("start_offset", Integer, nullable=False),
+    Column("end_offset", Integer, nullable=False),
+    CheckConstraint("start_offset >= 0 AND end_offset > start_offset", name="ck_evidence_span"),
+)
+
+# A run is written once and read whole: one JSON document per run.
+benchmark_runs = Table(
+    "benchmark_runs",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column(
+        "collection_id",
+        Uuid,
+        ForeignKey("collections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("payload", JSONB, nullable=False),
+)

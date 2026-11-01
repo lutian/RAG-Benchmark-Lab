@@ -6,10 +6,12 @@ from typing import Self
 from sqlalchemy import Connection, Engine, RootTransaction, create_engine
 
 from rag_lab.adapters.outbound.persistence.postgres.repositories import (
+    PostgresBenchmarkRunRepository,
     PostgresChunkRepository,
     PostgresCollectionRepository,
     PostgresDocumentRepository,
     PostgresEmbeddingRepository,
+    PostgresGoldenQuestionRepository,
     PostgresSearchRepository,
 )
 
@@ -32,6 +34,8 @@ class SqlAlchemyUnitOfWork:
         self.chunks = PostgresChunkRepository(self._connection)
         self.embeddings = PostgresEmbeddingRepository(self._connection)
         self.search = PostgresSearchRepository(self._connection)
+        self.golden = PostgresGoldenQuestionRepository(self._connection)
+        self.runs = PostgresBenchmarkRunRepository(self._connection)
         return self
 
     def __exit__(
