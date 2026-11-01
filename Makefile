@@ -39,9 +39,16 @@ demo-docker:        ## Same, inside the running Compose stack
 	docker compose exec api rag-lab demo --out /app/data/reports
 	mkdir -p reports && docker compose cp api:/app/data/reports/. ./reports/
 
-compose-smoke:      ## Build and start db/api/ui, then smoke-test the stack (no provider key needed)
-	docker compose up --detach --build --wait --wait-timeout 600 db api ui
-	python3 scripts/compose_smoke.py
+# Throwaway Compose project: the smoke data never reaches your real stack's volumes.
+# It publishes the same ports, so stop the main stack first (`docker compose down`).
+SMOKE = docker compose --project-name rag-benchmark-lab-smoke
+
+compose-smoke:      ## Build a throwaway db/api/ui stack, smoke-test it, remove it (no provider key needed)
+	$(SMOKE) up --detach --build --wait --wait-timeout 600 db api ui; \
+	status=$$?; \
+	if [ $$status -eq 0 ]; then python3 scripts/compose_smoke.py; status=$$?; fi; \
+	$(SMOKE) down --volumes; \
+	exit $$status
 
 golden:             ## Rebuild examples/golden.json after editing the sample corpus or questions
 	uv run python examples/build_golden.py

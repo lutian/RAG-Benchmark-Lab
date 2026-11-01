@@ -6,10 +6,13 @@ is ingested), PostgreSQL full-text search returns the expected chunk, and the
 Streamlit UI is up. Embeddings, reranking and generation need a provider and are
 covered by the test suite instead.
 
+It leaves a `compose-smoke-<hex>` collection behind, so run it against a throwaway
+stack: CI tears its stack down with `--volumes`, and `make compose-smoke` uses a
+separate Compose project that it removes afterwards.
+
 Standard library only, so it runs on the host with any Python 3.10+:
 
-    docker compose up -d --build --wait db api ui
-    python3 scripts/compose_smoke.py
+    python3 scripts/compose_smoke.py [--api-url ...] [--ui-url ...]
 """
 
 import argparse
@@ -22,9 +25,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-DEFAULT_DOCUMENT = Path(__file__).resolve().parent.parent / (
-    "examples/corpus/returns-and-refunds.md"
-)
+# The query and the text it must rank first are tied to this sample document.
+DOCUMENT = Path(__file__).resolve().parent.parent / "examples/corpus/returns-and-refunds.md"
 QUERY = "Final Sale tag"
 EXPECTED_TEXT = "Final Sale"
 
@@ -78,7 +80,7 @@ def wait_until_up(url: str, timeout: float) -> None:
             time.sleep(2)
 
 
-def run(api_url: str, ui_url: str, document: Path, timeout: float) -> None:
+def run(api_url: str, ui_url: str, timeout: float) -> None:
     wait_until_up(f"{api_url}/health", timeout)
     print(f"ok  API is up at {api_url}")
 
@@ -88,8 +90,8 @@ def run(api_url: str, ui_url: str, document: Path, timeout: float) -> None:
     chunk_set = collection["chunking_configs"][0]["key"]
     print(f"ok  collection {collection['id']} created (migrations applied)")
 
-    uploaded = upload(f"{api_url}/collections/{collection['id']}/documents", document)
-    print(f"ok  uploaded {document.name} as document {uploaded['id']}")
+    uploaded = upload(f"{api_url}/collections/{collection['id']}/documents", DOCUMENT)
+    print(f"ok  uploaded {DOCUMENT.name} as document {uploaded['id']}")
 
     result = post_json(
         f"{api_url}/collections/{collection['id']}/search",
@@ -107,15 +109,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--api-url", default="http://localhost:8000")
     parser.add_argument("--ui-url", default="http://localhost:8501")
-    parser.add_argument("--document", type=Path, default=DEFAULT_DOCUMENT)
     parser.add_argument(
         "--timeout", type=float, default=120, help="seconds to wait for each service"
     )
     args = parser.parse_args()
     try:
-        run(args.api_url.rstrip("/"), args.ui_url.rstrip("/"), args.document, args.timeout)
+        run(args.api_url.rstrip("/"), args.ui_url.rstrip("/"), args.timeout)
     except SmokeError as error:
         print(f"FAIL {error}", file=sys.stderr)
+        return 1
+    except OSError as error:  # connection reset, timeout after the service came up
+        print(f"FAIL network error: {error}", file=sys.stderr)
+        return 1
+    except (KeyError, IndexError, TypeError) as error:  # unexpected response shape
+        print(f"FAIL unexpected API response: {error!r}", file=sys.stderr)
         return 1
     print("Compose smoke test passed.")
     return 0
