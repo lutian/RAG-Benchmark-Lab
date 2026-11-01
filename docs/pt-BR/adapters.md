@@ -147,7 +147,7 @@ A documentação interativa fica em `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Ponto de entrada e navegação |
 | `pages/home.py` | Visão geral dos dois pipelines |
 | `pages/ingestion.py` | Coleções (barra lateral), uploads, lista de documentos, **inspetor de chunks**, progresso da indexação e a ação **Index chunk set** (com rebuild opcional) |
-| `pages/retrieval.py` | **Comparação de métodos**: uma pergunta, quatro colunas (vetorial, full-text, híbrida, híbrida + rerank), cada resultado com score, posição por etapa (inclusive a posição na híbrida antes do reranking), localização e termos da pergunta destacados; filtro por documento e `top_k` na barra lateral |
+| `pages/retrieval.py` | **Comparação de métodos**: uma pergunta, quatro colunas (vetorial, full-text, híbrida, híbrida + rerank; uma chave desliga o reranking), cada resultado com score, posição por etapa (inclusive a posição na híbrida antes do reranking), localização e termos da pergunta destacados; filtro por documento e `top_k` na barra lateral |
 | `highlight.py` | Funções puras que desenham os spans dos chunks com destaques alternados (sobreposições ganham uma cor própria) e marcam os termos da pergunta como evidência |
 | `api_client.py` | Cliente `httpx` tipado para a API |
 | `theme.py` + `.streamlit/config.toml` | Identidade visual: fundo branco, destaque azul `#2563EB`, fonte Inter, cards e badges |

@@ -18,9 +18,8 @@ class HttpReranker:
     def __init__(
         self, base_url: str, model: str, api_key: str = "", timeout_seconds: float = 60.0
     ) -> None:
-        if not base_url.strip():
-            raise ValueError("RERANKER_BASE_URL is required when RERANKER_PROVIDER=api")
-        self._url = f"{base_url.rstrip('/')}/rerank"
+        # A missing URL fails the reranked search only, never the API startup.
+        self._url = f"{base_url.rstrip('/')}/rerank" if base_url.strip() else ""
         self._model = model
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._http = httpx.Client(headers=headers, timeout=timeout_seconds)
@@ -32,17 +31,21 @@ class HttpReranker:
     def score(self, query: str, texts: Sequence[str]) -> list[float]:
         if not texts:
             return []
+        if not self._url:
+            raise RerankerError("RERANKER_BASE_URL is required when RERANKER_PROVIDER=api")
         body = {"model": self._model, "query": query, "documents": list(texts), "top_n": len(texts)}
         try:
             response = self._http.post(self._url, json=body)
         except httpx.HTTPError as error:
             raise RerankerError(f"reranker at {self._url} failed: {error}") from error
         if response.status_code >= 400:
-            raise RerankerError(
-                f"reranker at {self._url} returned HTTP {response.status_code}: "
-                f"{response.text[:200]}"
-            )
-        return _scores_in_input_order(response.json(), len(texts))
+            # The upstream body is not echoed: it can carry account or quota details.
+            raise RerankerError(f"reranker at {self._url} returned HTTP {response.status_code}")
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise RerankerError(f"reranker at {self._url} returned a non-JSON body") from error
+        return _scores_in_input_order(payload, len(texts))
 
 
 def _scores_in_input_order(payload: Any, count: int) -> list[float]:
@@ -51,8 +54,8 @@ def _scores_in_input_order(payload: Any, count: int) -> list[float]:
         raise RerankerError(f"unexpected reranker response: {str(payload)[:200]}")
     scores: dict[int, float] = {}
     for item in results:
-        score = item.get("relevance_score", item.get("score"))
-        if not isinstance(item.get("index"), int) or score is None:
+        score = item.get("relevance_score", item.get("score")) if isinstance(item, dict) else None
+        if not isinstance(score, int | float) or not isinstance(item.get("index"), int):
             raise RerankerError(f"unexpected reranker result: {str(item)[:200]}")
         scores[item["index"]] = float(score)
     missing = [i for i in range(count) if i not in scores]

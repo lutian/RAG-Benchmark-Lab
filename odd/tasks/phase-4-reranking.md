@@ -17,10 +17,10 @@ Assumptions (not user-stated): reranking applies to hybrid candidates only (the 
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S1 S2 S3 | inline | pending | |
-| T2 | S4 | inline | pending | |
-| T3 | S2 S3 | inline | pending | |
-| T4 | S5 | inline | pending | |
+| T1 | S1 S2 S3 | inline | done | f038c8e |
+| T2 | S4 | inline | done | ea3192e, 244cce9 |
+| T3 | S2 S3 | inline | done | ea3192e |
+| T4 | S5 | inline | done | ff5d9fb |
 
 - T1 Domain + application: `SearchMethod.HYBRID_RERANK`, `Reranker` port, `RerankerError`, reranking in `RetrievalService` (candidates, `rerank_ms`, `hybrid` rank kept).
 - T2 Adapters: `CrossEncoderReranker` (lazy model load), `HttpReranker` (Jina/Cohere/TEI), composition root, optional dependency + Dockerfile.
@@ -33,3 +33,5 @@ Route evidence: sequential dependent units, parent writes inline. Risk: item 5 (
 
 - L1 (2026-10-31, user): "sim, faz o push. E continua até entregar todos os passos. Só para se precisar de minha definição"
 - L2 (2026-11-01, user): "sempre faça a revisão com gentle-ai, não pergunte mais para esse projeto"
+- L3 Verification: 206 passed with TEST_DATABASE_URL (pgvector via pgserver), incl. migration 0003 backfill test (phase 3 advisory). ruff + mypy --strict clean. Real cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`, torch 2.15.0+cpu) scored the relevant chunk 6.6 vs -11. E2E uvicorn + pgvector + stub embeddings + local reranker: hybrid_rerank 200 with `ranks.hybrid`; first call 7.9 s (model load), then 35 ms. Not verified: Docker build with INSTALL_LOCAL_RERANKER, real /rerank API.
+- L4 Native review (consent granted per L2): code slice 75fcbd5..ea3192e (lineage review-c2a1ec52d461660e, lenses risk/resilience/reliability) **approved**, acknowledged; dependency commit 244cce9 alone (review-14eecb0e426f22ff, risk/resilience) **approved**, acknowledged. Advisories fixed afterwards: malformed /rerank bodies → RerankerError (502), upstream error body no longer echoed, missing RERANKER_BASE_URL fails only reranked searches (not API startup), UI toggle to skip reranking. Accepted: model download on first reranked search (documented; benchmarks warm up), failed model load retried on next request.

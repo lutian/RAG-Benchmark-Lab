@@ -104,6 +104,8 @@ def test_empty_input_makes_no_request(stub_factory: Callable[[Responder], StubRe
         (lambda body: (500, {"error": "boom"}), "HTTP 500"),
         (lambda body: (200, {"results": [{"index": 0, "relevance_score": 1.0}]}), "missing"),
         (lambda body: (200, {"unexpected": True}), "unexpected"),
+        (lambda body: (200, {"results": ["oops", 1]}), "unexpected"),
+        (lambda body: (200, [{"index": 0, "score": "high"}]), "unexpected"),
     ],
 )
 def test_failures_are_reported_as_reranker_errors(
@@ -120,6 +122,41 @@ def test_unreachable_endpoint_is_a_reranker_error() -> None:
         HttpReranker("http://127.0.0.1:9/v1", "m", timeout_seconds=1).score("q", ["a"])
 
 
-def test_base_url_is_required() -> None:
-    with pytest.raises(ValueError, match="RERANKER_BASE_URL"):
-        HttpReranker("", "m")
+def test_upstream_error_bodies_are_not_echoed(
+    stub_factory: Callable[[Responder], StubRerankAPI],
+) -> None:
+    stub = stub_factory(lambda body: (429, {"error": "quota exceeded for account 1234"}))
+
+    with pytest.raises(RerankerError) as error:
+        HttpReranker(stub.url, "m").score("q", ["a"])
+
+    assert "HTTP 429" in str(error.value)
+    assert "1234" not in str(error.value)
+
+
+def test_non_json_bodies_are_reranker_errors() -> None:
+    class Html(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            raw = b"<html>bad gateway</html>"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Html)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with pytest.raises(RerankerError, match="non-JSON"):
+            HttpReranker(f"http://127.0.0.1:{server.server_port}", "m").score("q", ["a"])
+    finally:
+        server.shutdown()
+
+
+def test_missing_base_url_fails_the_search_not_the_construction() -> None:
+    reranker = HttpReranker("", "m")
+
+    with pytest.raises(RerankerError, match="RERANKER_BASE_URL"):
+        reranker.score("q", ["a"])

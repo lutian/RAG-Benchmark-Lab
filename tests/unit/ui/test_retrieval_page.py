@@ -98,6 +98,15 @@ def test_compares_every_method_for_one_query(fake: FakeClient) -> None:
     assert any("not fully indexed" in warning.value for warning in app.warning)
 
 
+def test_reranking_can_be_switched_off(fake: FakeClient) -> None:
+    app = AppTest.from_file(PAGE).run()
+    app.toggle[0].set_value(False)
+    app.text_input[0].input("bank")
+    app.button[0].click().run()
+
+    assert [call[0] for call in fake.calls] == ["vector", "fulltext", "hybrid"]
+
+
 def test_waits_for_a_query_before_searching(fake: FakeClient) -> None:
     app = AppTest.from_file(PAGE).run()
 

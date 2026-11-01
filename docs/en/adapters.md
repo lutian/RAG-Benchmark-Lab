@@ -147,7 +147,7 @@ Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).
 | `app.py` | Entry point and navigation |
 | `pages/home.py` | Overview of both pipelines |
 | `pages/ingestion.py` | Collections (sidebar), uploads, document list, **chunk inspector**, indexing progress and the **Index chunk set** action (with optional rebuild) |
-| `pages/retrieval.py` | **Method comparison**: one question, four columns (vector, full-text, hybrid, hybrid + rerank), each hit with score, rank per stage (including its hybrid rank before reranking), location and highlighted query terms; document filter and `top_k` in the sidebar |
+| `pages/retrieval.py` | **Method comparison**: one question, four columns (vector, full-text, hybrid, hybrid + rerank; a toggle skips reranking), each hit with score, rank per stage (including its hybrid rank before reranking), location and highlighted query terms; document filter and `top_k` in the sidebar |
 | `highlight.py` | Pure functions rendering chunk spans as alternating highlights (overlaps get their own colour) and marking query terms as evidence |
 | `api_client.py` | Typed `httpx` client for the API |
 | `theme.py` + `.streamlit/config.toml` | Visual identity: white canvas, blue accent `#2563EB`, Inter font, cards and badges |

@@ -71,6 +71,11 @@ with st.sidebar:
     except (api_client.ApiError, httpx.HTTPError) as error:
         _fail(error)
     filenames = {d["id"]: d["filename"] for d in documents}
+    rerank = st.toggle(
+        "Include reranking",
+        value=True,
+        help="The first reranked search loads the cross-encoder model (can take a while).",
+    )
     selected = st.multiselect(
         "Only these documents",
         list(filenames),
@@ -89,8 +94,9 @@ if not submitted or not query.strip():
     )
     st.stop()
 
-columns = st.columns(len(METHODS), gap="medium")
-for column, (method, label) in zip(columns, METHODS.items(), strict=True):
+methods = {m: label for m, label in METHODS.items() if rerank or m != "hybrid_rerank"}
+columns = st.columns(len(methods), gap="medium")
+for column, (method, label) in zip(columns, methods.items(), strict=True):
     with column:
         st.markdown(f"#### {label}")
         try:
