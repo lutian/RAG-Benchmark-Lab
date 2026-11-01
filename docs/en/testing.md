@@ -50,6 +50,10 @@ Everything above the adapter uses `tests/fakes.py::FakeEmbedder`: deterministic 
 
 Metric functions are tested on hand-computed rankings (`tests/unit/domain/test_evaluation.py`). `BenchmarkService` runs end to end in memory with `ConceptEmbedder`, `FakeReranker` and a `FakeChatModel` that answers and judges, asserting the matrix shape, the warm-up (one extra reranker call per method), and generation/judge rates. The CLI is tested with an in-memory container and a temporary output directory. Golden storage has contract tests on both adapters, and `tests/integration/test_golden_constraints.py` proves on PostgreSQL that a labelled document cannot be deleted alone while its collection can.
 
+## Testing the presentation layer
+
+`tests/unit/ui/test_dashboard_data.py` checks the frames behind every dashboard chart; `test_benchmark_page.py` renders the page with a fake API (tiles against targets, starting a run). The demo command runs the real `examples/` corpus and golden file through an in-memory container, twice, to prove it is idempotent. `examples/build_golden.py` fails if any evidence excerpt is not found in the parsed text, so the shipped dataset always matches the corpus.
+
 ## PostgreSQL-only behaviour
 
 `tests/integration/test_postgres_fulltext.py` covers what the in-memory store deliberately does not imitate: stemming and stop words per collection language (`rates` matches `rate` in `english` but not in `simple`; `banco` matches `bancos` in `portuguese`). `tests/integration/test_migrations.py` downgrades to 0002, inserts a chunk, upgrades again and proves migration 0003 made it searchable.

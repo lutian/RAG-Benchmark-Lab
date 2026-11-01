@@ -50,6 +50,10 @@ Tudo acima do adaptador usa `tests/fakes.py::FakeEmbedder`: vetores determiníst
 
 As funções de métrica são testadas com rankings calculados à mão (`tests/unit/domain/test_evaluation.py`). O `BenchmarkService` roda de ponta a ponta em memória com `ConceptEmbedder`, `FakeReranker` e um `FakeChatModel` que responde e julga, verificando o formato da matriz, o aquecimento (uma chamada extra ao reranker por método) e as taxas de geração e do juiz. O CLI é testado com um container em memória e um diretório de saída temporário. O armazenamento do golden dataset tem testes de contrato nos dois adaptadores, e `tests/integration/test_golden_constraints.py` prova no PostgreSQL que um documento rotulado não pode ser apagado sozinho, enquanto sua coleção pode.
 
+## Testando a camada de apresentação
+
+`tests/unit/ui/test_dashboard_data.py` verifica os dados por trás de cada gráfico do dashboard; `test_benchmark_page.py` renderiza a página com uma API falsa (indicadores contra as metas, início de uma execução). O comando de demo roda o corpus e o golden dataset reais de `examples/` com um container em memória, duas vezes, para provar que é idempotente. O `examples/build_golden.py` falha se algum trecho de evidência não for encontrado no texto processado, então o dataset distribuído sempre corresponde ao corpus.
+
 ## Comportamento exclusivo do PostgreSQL
 
 `tests/integration/test_postgres_fulltext.py` cobre o que o store em memória deliberadamente não imita: stemming e stop words por idioma da coleção (`rates` encontra `rate` em `english`, mas não em `simple`; `banco` encontra `bancos` em `portuguese`). `tests/integration/test_migrations.py` volta para a 0002, insere um chunk, sobe de novo e prova que a migração 0003 o tornou pesquisável.

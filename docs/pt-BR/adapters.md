@@ -169,7 +169,10 @@ rag-lab benchmark --collection handbook --out reports/                 # todos o
 rag-lab benchmark --collection handbook --method hybrid --method hybrid_rerank --generation --judge
 rag-lab runs --collection handbook                                     # execuções gravadas
 rag-lab report --collection handbook --run <run-id> --out reports/    # reexportar uma execução
+rag-lab demo                                                           # corpus de exemplo de ponta a ponta
 ```
+
+O `rag-lab demo` é idempotente: reutiliza a coleção `sample-handbook`, pula arquivos duplicados e chunks já indexados, importa o `examples/golden.json` só quando o dataset está vazio (lendo o arquivo antes de qualquer ingestão, para falhar cedo se o caminho estiver errado) e roda um novo benchmark. O progresso é um contador ao vivo no terminal e uma linha a cada 10% em logs.
 
 Cada execução escreve `benchmark-<timestamp>-<id>.md` e `.json` e também fica gravada, então aparece na UI. Erros imprimem `error: …` e saem com código 1.
 
@@ -186,6 +189,7 @@ Cada execução escreve `benchmark-<timestamp>-<id>.md` e `.json` e também fica
 | `app.py` | Ponto de entrada e navegação |
 | `pages/home.py` | Visão geral dos dois pipelines |
 | `pages/ingestion.py` | Coleções (barra lateral), uploads, lista de documentos, **inspetor de chunks**, progresso da indexação e a ação **Index chunk set** (com rebuild opcional) |
+| `pages/benchmark.py` + `dashboard.py` | **Dashboard do benchmark**: iniciar uma execução, a melhor estratégia em relação às metas (escolhida pela API com a regra do relatório), mapa de calor chunking × método para qualquer métrica medida, barras de latência (p95 e CPU no tooltip), uma tabela com todas as estratégias, posição do primeiro chunk relevante por pergunta e o relatório Markdown. Os gráficos usam uma única matiz (o azul do design) com a estratégia no eixo, então nenhuma cor carrega identidade; `dashboard.py` concentra a preparação dos dados, com testes unitários |
 | `pages/golden.py` | **Revisão do golden dataset**: progresso até 50 perguntas aprovadas, geração pelo LLM e perguntas manuais, cada card com a evidência destacada e editar / aprovar / rejeitar / apagar, exportação e importação em JSON |
 | `pages/ask.py` | **Respostas fundamentadas** em três painéis: escopo e estratégia (barra lateral), a resposta com as citações em destaque (fontes desconhecidas sinalizadas) e o motivo da abstenção, e todas as fontes, com as citadas marcadas |
 | `pages/retrieval.py` | **Comparação de métodos**: uma pergunta, quatro colunas (vetorial, full-text, híbrida, híbrida + rerank; uma chave desliga o reranking), cada resultado com score, posição por etapa (inclusive a posição na híbrida antes do reranking), localização e termos da pergunta destacados; filtro por documento e `top_k` na barra lateral |

@@ -16,7 +16,7 @@ This is not a chatbot that reads PDFs. You upload any corpus. The lab chunks it 
 | 4. Reranking | Hybrid + rerank as the fourth strategy: local cross-encoder (Sentence Transformers) or any `/rerank` API; rank before/after reranking | ✅ Done |
 | 5. Generation | Grounded answers from any OpenAI-compatible LLM: numbered citations checked by parsing, two abstention paths (no evidence / model) | ✅ Done |
 | 6. Evaluation | Golden dataset (LLM drafts + human review, export/import), chunking × strategy benchmark: Recall@k, MRR, latency, CPU, citation validity, LLM judge; Markdown/JSON report and `rag-lab` CLI | ✅ Done |
-| 7. Presentation | Comparative dashboard | ⏳ Next |
+| 7. Presentation | Benchmark dashboard, sample corpus with a 52-question golden dataset, `rag-lab demo`, benchmark guide | ✅ Done |
 
 ## Quick start (Docker)
 
@@ -35,7 +35,7 @@ docker compose up --build -d
 | API (FastAPI) | http://localhost:8000 · interactive docs at http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (loopback only) |
 
-Then open the UI, create a collection in the sidebar, upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set. Press **Index chunk set** to embed it with the provider configured in `.env`. On the **Retrieval** page, ask a question and compare vector, full-text, hybrid and reranked results side by side. The first reranked search downloads the cross-encoder (~90 MB) into the `models` volume. On the **Ask** page, get an answer with citations next to the sources it was given. On **Golden dataset**, generate questions with the LLM, add your own, and approve the ones the benchmark should use; then run `docker compose exec api rag-lab benchmark --collection <name>`.
+Then open the UI, create a collection in the sidebar, upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set. Press **Index chunk set** to embed it with the provider configured in `.env`. On the **Retrieval** page, ask a question and compare vector, full-text, hybrid and reranked results side by side. The first reranked search downloads the cross-encoder (~90 MB) into the `models` volume. On the **Ask** page, get an answer with citations next to the sources it was given. On **Golden dataset**, generate questions with the LLM, add your own, and approve the ones the benchmark should use; then run the benchmark from the **Benchmark** page (or `docker compose exec api rag-lab benchmark --collection <name>`) and compare strategies on the dashboard.
 
 Optional local models with Ollama:
 
@@ -46,6 +46,26 @@ docker compose exec ollama ollama pull nomic-embed-text
 # in .env: LLM_BASE_URL=http://ollama:11434/v1, EMBEDDING_BASE_URL=http://ollama:11434/v1,
 #          EMBEDDING_MODEL=nomic-embed-text, EMBEDDING_DIMENSIONS=768
 ```
+
+## See it work in 5 minutes: the sample benchmark
+
+The repository ships a small fictional handbook (`examples/corpus/`, 7 documents) with a reviewed golden dataset of 52 questions (`examples/golden.json`). One command ingests it, indexes every chunk set, imports the questions and runs the full benchmark:
+
+```bash
+make demo-docker          # inside Compose (report copied to ./reports)
+# or locally: make demo   (uv, PostgreSQL from `docker compose up -d db`)
+```
+
+Then open **Benchmark** in the UI. Reference results ([`examples/sample-report.md`](examples/sample-report.md), MiniLM embeddings, local cross-encoder, one CPU):
+
+| Strategy (`fixed-800-120`) | Recall@1 | Recall@5 | MRR@10 | p50 latency |
+|----------------------------|----------|----------|--------|-------------|
+| Vector | 71.2% | 98.1% | 0.816 | 24 ms |
+| Full-text | 67.3% | 96.2% | 0.803 | 2 ms |
+| Hybrid (RRF) | 71.2% | 100.0% | 0.838 | 27 ms |
+| Hybrid + rerank | 96.2% | 100.0% | 0.978 | 1,855 ms |
+
+How to read these numbers (and run your own corpus): [benchmark guide](docs/en/benchmark-guide.md).
 
 ## Try it with curl
 
@@ -143,6 +163,7 @@ Hexagonal architecture: the domain has no framework imports, and every external 
 | Configuration | [configuration](docs/en/configuration.md) | [configuração](docs/pt-BR/configuration.md) |
 | Testing | [testing](docs/en/testing.md) | [testes](docs/pt-BR/testing.md) |
 | Decisions (ADRs) | [decisions](docs/en/decisions.md) | [decisões](docs/pt-BR/decisions.md) |
+| Running and reading the benchmark | [benchmark guide](docs/en/benchmark-guide.md) | [guia do benchmark](docs/pt-BR/benchmark-guide.md) |
 
 ## Validation targets (proposed, not results)
 

@@ -169,7 +169,10 @@ rag-lab benchmark --collection handbook --out reports/                 # all chu
 rag-lab benchmark --collection handbook --method hybrid --method hybrid_rerank --generation --judge
 rag-lab runs --collection handbook                                     # stored runs
 rag-lab report --collection handbook --run <run-id> --out reports/    # re-export a run
+rag-lab demo                                                           # sample corpus end to end
 ```
+
+`rag-lab demo` is idempotent: it reuses the `sample-handbook` collection, skips duplicate files and already-embedded chunks, imports `examples/golden.json` only into an empty dataset (reading it before any ingestion, so a bad path fails fast), then runs a new benchmark. Progress is a live counter on a terminal and one line per 10% in logs.
 
 Each run writes `benchmark-<timestamp>-<id>.md` and `.json` and is also stored, so it appears in the UI. Errors print `error: …` and exit with code 1.
 
@@ -186,6 +189,7 @@ Each run writes `benchmark-<timestamp>-<id>.md` and `.json` and is also stored, 
 | `app.py` | Entry point and navigation |
 | `pages/home.py` | Overview of both pipelines |
 | `pages/ingestion.py` | Collections (sidebar), uploads, document list, **chunk inspector**, indexing progress and the **Index chunk set** action (with optional rebuild) |
+| `pages/benchmark.py` + `dashboard.py` | **Benchmark dashboard**: start a run, best strategy against the targets (chosen by the API with the report's rule), chunking × method heatmap of any measured metric, latency bars (p95 and CPU in the tooltip), a table of every strategy, per-question rank of the first relevant chunk, Markdown report. Charts use one hue (the design accent) with the strategy on the axis, so no colour carries identity; `dashboard.py` holds the unit-tested data shaping |
 | `pages/golden.py` | **Golden dataset review**: progress toward 50 approved questions, LLM generation and manual questions, each card with its highlighted evidence and edit / approve / reject / delete, JSON export and import |
 | `pages/ask.py` | **Grounded answers** in three panels: scope and strategy (sidebar), the answer with citation badges (unknown sources flagged) and the abstention reason, and every source with the cited ones marked |
 | `pages/retrieval.py` | **Method comparison**: one question, four columns (vector, full-text, hybrid, hybrid + rerank; a toggle skips reranking), each hit with score, rank per stage (including its hybrid rank before reranking), location and highlighted query terms; document filter and `top_k` in the sidebar |

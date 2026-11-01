@@ -16,7 +16,7 @@ Não é um chatbot que lê PDFs. Você envia qualquer corpus. O laboratório o d
 | 4. Reranking | Híbrida + rerank como quarta estratégia: cross-encoder local (Sentence Transformers) ou qualquer API `/rerank`; posição antes/depois do reranking | ✅ Concluída |
 | 5. Geração | Respostas fundamentadas de qualquer LLM compatível com OpenAI: citações numeradas verificadas por parsing, dois caminhos de abstenção (sem evidência / modelo) | ✅ Concluída |
 | 6. Avaliação | Golden dataset (rascunhos do LLM + revisão humana, export/import), benchmark chunking × estratégia: Recall@k, MRR, latência, CPU, validade das citações, juiz LLM; relatório Markdown/JSON e CLI `rag-lab` | ✅ Concluída |
-| 7. Apresentação | Dashboard comparativo | ⏳ Próxima |
+| 7. Apresentação | Dashboard do benchmark, corpus de exemplo com golden dataset de 52 perguntas, `rag-lab demo`, guia do benchmark | ✅ Concluída |
 
 ## Início rápido (Docker)
 
@@ -35,7 +35,7 @@ docker compose up --build -d
 | API (FastAPI) | http://localhost:8000 · documentação interativa em http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (apenas loopback) |
 
-Abra a UI, crie uma coleção na barra lateral, envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set. Clique em **Index chunk set** para gerar os embeddings com o provedor configurado no `.env`. Na página **Retrieval**, faça uma pergunta e compare lado a lado os resultados vetoriais, full-text, híbridos e com reranking. A primeira busca com reranking baixa o cross-encoder (~90 MB) para o volume `models`. Na página **Ask**, obtenha uma resposta com citações ao lado das fontes que o modelo recebeu. Em **Golden dataset**, gere perguntas com o LLM, adicione as suas e aprove as que o benchmark deve usar; depois rode `docker compose exec api rag-lab benchmark --collection <nome>`.
+Abra a UI, crie uma coleção na barra lateral, envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set. Clique em **Index chunk set** para gerar os embeddings com o provedor configurado no `.env`. Na página **Retrieval**, faça uma pergunta e compare lado a lado os resultados vetoriais, full-text, híbridos e com reranking. A primeira busca com reranking baixa o cross-encoder (~90 MB) para o volume `models`. Na página **Ask**, obtenha uma resposta com citações ao lado das fontes que o modelo recebeu. Em **Golden dataset**, gere perguntas com o LLM, adicione as suas e aprove as que o benchmark deve usar; depois rode o benchmark na página **Benchmark** (ou `docker compose exec api rag-lab benchmark --collection <nome>`) e compare as estratégias no dashboard.
 
 Modelos locais opcionais com Ollama:
 
@@ -46,6 +46,26 @@ docker compose exec ollama ollama pull nomic-embed-text
 # no .env: LLM_BASE_URL=http://ollama:11434/v1, EMBEDDING_BASE_URL=http://ollama:11434/v1,
 #          EMBEDDING_MODEL=nomic-embed-text, EMBEDDING_DIMENSIONS=768
 ```
+
+## Veja funcionando em 5 minutos: o benchmark de exemplo
+
+O repositório traz um pequeno manual fictício (`examples/corpus/`, 7 documentos) com um golden dataset revisado de 52 perguntas (`examples/golden.json`). Um único comando faz a ingestão, indexa todos os chunk sets, importa as perguntas e roda o benchmark completo:
+
+```bash
+make demo-docker          # dentro do Compose (o relatório é copiado para ./reports)
+# ou localmente: make demo   (uv, PostgreSQL com `docker compose up -d db`)
+```
+
+Depois abra **Benchmark** na UI. Resultados de referência ([`examples/sample-report.md`](examples/sample-report.md), embeddings MiniLM, cross-encoder local, uma CPU):
+
+| Estratégia (`fixed-800-120`) | Recall@1 | Recall@5 | MRR@10 | Latência p50 |
+|------------------------------|----------|----------|--------|--------------|
+| Vetorial | 71,2% | 98,1% | 0,816 | 24 ms |
+| Full-text | 67,3% | 96,2% | 0,803 | 2 ms |
+| Híbrida (RRF) | 71,2% | 100,0% | 0,838 | 27 ms |
+| Híbrida + rerank | 96,2% | 100,0% | 0,978 | 1.855 ms |
+
+Como ler esses números (e rodar o seu próprio corpus): [guia do benchmark](docs/pt-BR/benchmark-guide.md).
 
 ## Teste com curl
 
@@ -143,6 +163,7 @@ Arquitetura hexagonal: o domínio não importa frameworks, e toda dependência e
 | Configuração | [configuração](docs/pt-BR/configuration.md) | [configuration](docs/en/configuration.md) |
 | Testes | [testes](docs/pt-BR/testing.md) | [testing](docs/en/testing.md) |
 | Decisões (ADRs) | [decisões](docs/pt-BR/decisions.md) | [decisions](docs/en/decisions.md) |
+| Como executar e ler o benchmark | [benchmark guide](docs/en/benchmark-guide.md) | [guia do benchmark](docs/pt-BR/benchmark-guide.md) |
 
 ## Metas de validação (propostas, não resultados)
 
