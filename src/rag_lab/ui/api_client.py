@@ -8,6 +8,9 @@ import streamlit as st
 from rag_lab.config import get_settings
 
 INDEXING_TIMEOUT_SECONDS = 1800.0
+# A full matrix with reranking and generation can take tens of minutes; for longer
+# runs use the CLI (`rag-lab benchmark`), which has no HTTP timeout at all.
+BENCHMARK_TIMEOUT_SECONDS = 3600.0
 # Margin for retrieval and reranking on top of the LLM attempts.
 GENERATION_MARGIN_SECONDS = 120.0
 
@@ -23,15 +26,20 @@ class ApiClient:
         self._http = httpx.Client(base_url=base_url, timeout=timeout)
         self._generation_timeout = generation_timeout
 
-    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+    def _send(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        """Send a request; any error status becomes ApiError, JSON body or not (a proxy's
+        HTML 502 page included)."""
         response = self._http.request(method, path, **kwargs)
         if response.status_code >= 400:
             try:
                 detail = response.json().get("detail", response.text)
-            except ValueError:
-                detail = response.text
+            except (ValueError, AttributeError):
+                detail = response.text[:300]
             raise ApiError(str(detail))
-        return response.json()
+        return response
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        return self._send(method, path, **kwargs).json()
 
     def list_collections(self) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = self._request("GET", "/collections")
@@ -184,9 +192,7 @@ class ApiClient:
         return result
 
     def golden_delete(self, collection_id: str, question_id: str) -> None:
-        response = self._http.delete(f"/collections/{collection_id}/golden/{question_id}")
-        if response.status_code >= 400:
-            raise ApiError(response.json().get("detail", response.text))
+        self._send("DELETE", f"/collections/{collection_id}/golden/{question_id}")
 
     def golden_export(self, collection_id: str) -> dict[str, Any]:
         result: dict[str, Any] = self._request("GET", f"/collections/{collection_id}/golden/export")
@@ -212,18 +218,14 @@ class ApiClient:
         return result
 
     def benchmark_report(self, collection_id: str, run_id: str) -> str:
-        response = self._http.get(f"/collections/{collection_id}/benchmarks/{run_id}/report")
-        if response.status_code >= 400:
-            raise ApiError(response.json().get("detail", response.text))
-        return response.text
+        return self._send("GET", f"/collections/{collection_id}/benchmarks/{run_id}/report").text
 
     def run_benchmark(self, collection_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        # Generation runs call the LLM per question x strategy: allow a long wait.
         result: dict[str, Any] = self._request(
             "POST",
             f"/collections/{collection_id}/benchmarks",
             json=body,
-            timeout=INDEXING_TIMEOUT_SECONDS,
+            timeout=BENCHMARK_TIMEOUT_SECONDS,
         )
         return result
 

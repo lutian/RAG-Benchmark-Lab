@@ -37,7 +37,7 @@ demo:               ## Sample corpus end to end: ingest, index, import golden, b
 
 demo-docker:        ## Same, inside the running Compose stack
 	docker compose exec api rag-lab demo --out /app/data/reports
-	docker compose cp api:/app/data/reports ./reports
+	mkdir -p reports && docker compose cp api:/app/data/reports/. ./reports/
 
 golden:             ## Rebuild examples/golden.json after editing the sample corpus or questions
 	uv run python examples/build_golden.py

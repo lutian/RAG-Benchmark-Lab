@@ -180,7 +180,7 @@ def test_import_rejects_malformed_entries_and_never_keeps_stale_offsets() -> Non
         lab.service.import_(lab.collection.id, payload(start="x"))
 
 
-def test_oversized_import_excerpts_are_rejected_and_bad_llm_replies_are_skipped() -> None:
+def test_oversized_import_excerpts_reject_the_payload_and_blank_replies_are_skipped() -> None:
     lab = Lab()
     entry = {"content_hash": lab.policy.content_hash, "filename": "p", "start": 0, "end": 1,
              "excerpt": "x" * 20_001}  # fmt: skip

@@ -82,14 +82,32 @@ def _write(run: BenchmarkRun, collection: Collection, out: Path) -> tuple[Path, 
 
 def _benchmark(args: argparse.Namespace, container: Container) -> int:
     collection = _collection(container, args.collection)
+    return _run_benchmark(
+        container, collection, args.out, args.chunk_sets, args.methods, args.ks,
+        args.generation, args.judge, args.answer_top_k,
+    )  # fmt: skip
+
+
+def _run_benchmark(
+    container: Container,
+    collection: Collection,
+    out: Path,
+    chunk_sets: Sequence[str] | None = None,
+    methods: Sequence[str] | None = None,
+    ks: Sequence[int] | None = None,
+    generation: bool = False,
+    judge: bool = False,
+    answer_top_k: int = 5,
+) -> int:
+    """Run, store and write one benchmark; unset options mean "everything"."""
     try:
         config = BenchmarkConfig(
-            chunk_sets=tuple(args.chunk_sets or [c.key for c in collection.chunking_configs]),
-            methods=tuple(SearchMethod(m) for m in args.methods or [m.value for m in SearchMethod]),
-            ks=tuple(sorted(set(args.ks or [1, 5, 10]))),
-            generation=args.generation,
-            judge=args.judge,
-            answer_top_k=args.answer_top_k,
+            chunk_sets=tuple(chunk_sets or [c.key for c in collection.chunking_configs]),
+            methods=tuple(SearchMethod(m) for m in methods or [m.value for m in SearchMethod]),
+            ks=tuple(sorted(set(ks or [1, 5, 10]))),
+            generation=generation,
+            judge=judge,
+            answer_top_k=answer_top_k,
         )
     except ValueError as error:
         raise RagLabError(str(error)) from error
@@ -106,7 +124,7 @@ def _benchmark(args: argparse.Namespace, container: Container) -> int:
     run = container.benchmark.run(collection.id, config, progress)
     if interactive:
         print(file=sys.stderr)
-    markdown, data = _write(run, collection, args.out)
+    markdown, data = _write(run, collection, out)
     k = headline_k(run.config)
     best = best_strategy(run.summaries, k)
     print(f"run {run.id}: best {best.chunk_set} + {best.method} "
@@ -138,6 +156,11 @@ def _demo(args: argparse.Namespace, container: Container) -> int:
     files = sorted(p for p in args.corpus.iterdir() if p.is_file()) if args.corpus.is_dir() else []
     if not files:
         raise RagLabError(f"no documents found in {args.corpus}")
+    # Read the golden dataset first: a bad path fails before any ingestion or indexing.
+    try:
+        golden = json.loads(args.golden.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise RagLabError(f"cannot read golden dataset {args.golden}: {error}") from error
     existing = [c for c in container.ingestion.list_collections() if c.name == args.collection]
     collection = (
         existing[0]
@@ -154,15 +177,11 @@ def _demo(args: argparse.Namespace, container: Container) -> int:
         report = container.indexing.index_chunk_set(collection.id, config.key)
         print(f"  indexed {config.key}: {report.embedded} new of {report.total} chunks")
     if not container.golden.questions(collection.id):
-        imported = container.golden.import_(
-            collection.id, json.loads(args.golden.read_text(encoding="utf-8"))
-        )
+        imported = container.golden.import_(collection.id, golden)
         print(f"  golden dataset: {imported.imported} questions ({imported.skipped} skipped)")
-    benchmark = argparse.Namespace(
-        collection=collection.name, chunk_sets=None, methods=None, ks=None,
-        generation=args.generation, judge=args.judge, answer_top_k=5, out=args.out,
-    )  # fmt: skip
-    return _benchmark(benchmark, container)
+    return _run_benchmark(
+        container, collection, args.out, generation=args.generation, judge=args.judge
+    )
 
 
 def main(argv: Sequence[str] | None = None, container: Container | None = None) -> int:

@@ -100,10 +100,9 @@ with st.sidebar:
 run = next(r for r in runs if r["id"] == run_id)
 summaries = run["summaries"]
 options = metric_options(summaries)
-headline = "Recall@5" if "Recall@5" in options else next(iter(options))
-best = max(
-    summaries, key=lambda s: (s["recall"].get(options[headline].split(":")[-1], 0), s["mrr"])
-)
+k = run["headline_k"]
+headline = f"Recall@{k}"
+best = run["best"]  # chosen by the API with the same rule as the report and the CLI
 
 # --- headline: best strategy against the targets --------------------------------------
 st.markdown(
@@ -112,10 +111,8 @@ st.markdown(
 )
 tiles = st.columns(4)
 tiles[0].metric("Questions", f"{run['question_count']} / {TARGET_QUESTIONS}")
-recall5 = best["recall"].get("5")
-tiles[1].metric(
-    "Recall@5", "—" if recall5 is None else f"{recall5:.1%}", _delta(recall5, TARGET_RECALL_AT_5)
-)
+recall = best["recall"][str(k)]
+tiles[1].metric(headline, f"{recall:.1%}", _delta(recall, TARGET_RECALL_AT_5) if k == 5 else None)
 tiles[2].metric(
     "MRR", f"{best['mrr']:.3f}",
     _delta(best["mrr"], TARGET_MRR_AT_10) if run["config"]["mrr_cutoff"] == 10 else None,

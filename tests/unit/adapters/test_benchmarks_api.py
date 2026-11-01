@@ -46,6 +46,8 @@ def test_run_list_get_and_report() -> None:
         ("fixed-40-0", "vector"),
     ]
     assert body["summaries"][0]["recall"] == {"1": 1.0, "5": 1.0}
+    assert body["headline_k"] == 5
+    assert body["best"]["method"] in {"fulltext", "vector"}
     assert set(body["environment"]) >= {"embedding", "reranker", "llm"}
     assert [r["id"] for r in client.get(url).json()] == [run_id]
     assert len(full["results"]) == 2

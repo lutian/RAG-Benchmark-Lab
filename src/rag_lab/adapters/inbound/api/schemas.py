@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from rag_lab.application.reporting import best_strategy, headline_k
 from rag_lab.application.run_codec import run_to_payload
 from rag_lab.application.services.answering import Answer
 from rag_lab.application.services.golden import GoldenQuestionView, ImportReport
@@ -22,6 +23,7 @@ from rag_lab.domain.evaluation import (
     BenchmarkRun,
     QuestionOrigin,
     QuestionStatus,
+    StrategySummary,
 )
 from rag_lab.domain.retrieval import SearchMethod
 
@@ -490,32 +492,36 @@ class BenchmarkRunOut(BaseModel):
     question_count: int
     config: dict[str, object]
     environment: dict[str, str]
+    headline_k: int = Field(description="The Recall@k used to rank strategies (5 when measured).")
+    best: StrategySummaryOut = Field(description="Same rule as the report and the CLI.")
     summaries: list[StrategySummaryOut]
 
     @classmethod
     def from_run(cls, run: BenchmarkRun) -> "BenchmarkRunOut":
-        payload = run_to_payload(run)
+        def summary(s: StrategySummary) -> StrategySummaryOut:
+            return StrategySummaryOut(
+                chunk_set=s.chunk_set,
+                method=s.method,
+                questions=s.questions,
+                recall=s.recall,
+                mrr=s.mrr,
+                latency_p50_ms=s.latency_p50_ms,
+                latency_p95_ms=s.latency_p95_ms,
+                cpu_ms_mean=s.cpu_ms_mean,
+                abstention_rate=s.abstention_rate,
+                citation_valid_rate=s.citation_valid_rate,
+                supported_rate=s.supported_rate,
+                tokens=s.tokens,
+            )
+
+        k = headline_k(run.config)
         return cls(
             id=run.id,
             created_at=run.created_at,
             question_count=run.question_count,
-            config=payload["config"],
+            config=run_to_payload(run)["config"],
             environment=run.environment,
-            summaries=[
-                StrategySummaryOut(
-                    chunk_set=s.chunk_set,
-                    method=s.method,
-                    questions=s.questions,
-                    recall=s.recall,
-                    mrr=s.mrr,
-                    latency_p50_ms=s.latency_p50_ms,
-                    latency_p95_ms=s.latency_p95_ms,
-                    cpu_ms_mean=s.cpu_ms_mean,
-                    abstention_rate=s.abstention_rate,
-                    citation_valid_rate=s.citation_valid_rate,
-                    supported_rate=s.supported_rate,
-                    tokens=s.tokens,
-                )
-                for s in run.summaries
-            ],
+            headline_k=k,
+            best=summary(best_strategy(run.summaries, k)),
+            summaries=[summary(s) for s in run.summaries],
         )

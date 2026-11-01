@@ -108,3 +108,29 @@ def test_demo_runs_the_sample_corpus_end_to_end_and_is_idempotent(
     assert len(list(tmp_path.glob("*.md"))) == 2
     [collection] = container.ingestion.list_collections()
     assert len(container.golden.questions(collection.id)) == 52
+
+
+def test_demo_fails_before_ingesting_when_the_golden_file_is_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    container = build_in_memory_container(settings, FakeEmbedder(), FakeReranker(), FakeChatModel())
+    corpus = Path(__file__).resolve().parents[2] / "examples" / "corpus"
+
+    code = main(
+        ["demo", "--corpus", str(corpus), "--golden", str(tmp_path / "nope.json")], container
+    )
+
+    assert code == 1
+    assert "cannot read golden dataset" in capsys.readouterr().err
+    assert container.ingestion.list_collections() == []
+
+
+def test_progress_is_one_line_per_tenth_outside_a_terminal(
+    container: Container, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["benchmark", "--collection", "handbook", "--out", str(tmp_path)], container)
+
+    lines = capsys.readouterr().err.splitlines()
+    assert lines[-1] == "4/4 queries"  # 1 question x 1 chunk set x 4 methods
+    assert all(line.endswith(" queries") for line in lines)

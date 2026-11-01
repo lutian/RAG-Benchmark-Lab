@@ -29,7 +29,8 @@ def summary(method: str, recall5: float, mrr: float) -> dict[str, Any]:
 
 RUN = {
     "id": "r1", "created_at": "2026-11-01T10:00:00+00:00", "question_count": 2,
-    "config": {"mrr_cutoff": 10}, "environment": {},
+    "config": {"mrr_cutoff": 10}, "environment": {}, "headline_k": 5,
+    "best": summary("hybrid_rerank", 1.0, 0.9),
     "summaries": [summary("vector", 0.5, 0.4), summary("hybrid_rerank", 1.0, 0.9)],
 }  # fmt: skip
 
