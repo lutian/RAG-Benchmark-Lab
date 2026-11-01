@@ -5,6 +5,8 @@ import itertools
 import re
 from collections.abc import Sequence
 
+from rag_lab.domain.answers import CITATION_PATTERN
+
 
 def render_chunks(text: str, spans: Sequence[tuple[int, int]]) -> str:
     """Render ``text`` with each chunk wrapped in a ``<mark>``.
@@ -58,22 +60,19 @@ def highlight_terms(text: str, query: str, min_length: int = 3) -> str:
     return "".join(parts)
 
 
-_CITATION = re.compile(r"(?<!\w)\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
-
-
-def render_answer(text: str, valid: set[int]) -> str:
+def render_answer(text: str, invalid: set[int]) -> str:
     """Escape an answer and turn ``[n]`` citations into badges.
 
-    A citation group with a number outside ``valid`` is flagged, so a hallucinated
-    source is visible at a glance.
+    Uses the domain's citation pattern, so badges match the API's citation verdict;
+    a group containing a number from ``invalid`` (as reported by the API) is flagged.
     """
     parts: list[str] = []
     position = 0
-    for match in _CITATION.finditer(text):
+    for match in CITATION_PATTERN.finditer(text):
         parts.append(html.escape(text[position : match.start()], quote=False))
         numbers = {int(n) for n in match.group(1).split(",")}
         label = html.escape(match.group(), quote=False)
-        if numbers <= valid:
+        if not numbers & invalid:
             parts.append(f'<span class="rl-cite">{label}</span>')
         else:
             parts.append(

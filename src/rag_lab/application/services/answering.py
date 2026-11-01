@@ -16,13 +16,9 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-from rag_lab.application.ports.generation import ChatModel, Completion
+from rag_lab.application.ports.generation import ChatModel
 from rag_lab.application.prompts import answer_messages
-from rag_lab.application.services.retrieval import (
-    RetrievalService,
-    SearchHit,
-    SearchTimings,
-)
+from rag_lab.application.services.retrieval import RetrievalService, SearchHit, SearchTimings
 from rag_lab.domain.answers import CitationCheck, check_citations, is_abstention
 from rag_lab.domain.retrieval import SearchMethod
 
@@ -81,8 +77,21 @@ class AnswerService:
         )
         sources = result.hits
         if not sources:
-            return self._answer(
-                result.query, method, config_key, "", sources, None, result.timings, 0.0, started
+            # Nothing retrieved: abstain without calling the LLM.
+            return Answer(
+                question=result.query,
+                method=method,
+                config_key=config_key,
+                text="",
+                abstained=True,
+                abstention_reason="no_evidence_retrieved",
+                sources=sources,
+                citations=(),
+                citation_check=CitationCheck(cited=(), invalid=()),
+                model=None,
+                prompt_tokens=None,
+                completion_tokens=None,
+                timings=AnswerTimings(result.timings, 0.0, _elapsed_ms(started)),
             )
 
         generation_started = time.perf_counter()
@@ -90,51 +99,24 @@ class AnswerService:
             answer_messages(result.query, [hit.chunk for hit in sources])
         )
         generation_ms = _elapsed_ms(generation_started)
-        return self._answer(
-            result.query,
-            method,
-            config_key,
-            completion.text.strip(),
-            sources,
-            completion,
-            result.timings,
-            generation_ms,
-            started,
-        )
-
-    @staticmethod
-    def _answer(
-        question: str,
-        method: SearchMethod,
-        config_key: str,
-        text: str,
-        sources: tuple[SearchHit, ...],
-        completion: Completion | None,
-        retrieval: SearchTimings,
-        generation_ms: float,
-        started: float,
-    ) -> Answer:
-        reason: AbstentionReason | None = None
-        if completion is None:
-            reason = "no_evidence_retrieved"
-        elif is_abstention(text):
-            reason = "model_abstained"
-        check = check_citations("" if reason else text, len(sources))
+        text = completion.text.strip()
+        abstained = is_abstention(text)
+        check = check_citations("" if abstained else text, len(sources))
         valid_numbers = [n for n in check.cited if n not in check.invalid]
         return Answer(
-            question=question,
+            question=result.query,
             method=method,
             config_key=config_key,
             text=text,
-            abstained=reason is not None,
-            abstention_reason=reason,
+            abstained=abstained,
+            abstention_reason="model_abstained" if abstained else None,
             sources=sources,
             citations=tuple(Citation(n, sources[n - 1]) for n in valid_numbers),
             citation_check=check,
-            model=completion.model if completion else None,
-            prompt_tokens=completion.prompt_tokens if completion else None,
-            completion_tokens=completion.completion_tokens if completion else None,
-            timings=AnswerTimings(retrieval, generation_ms, _elapsed_ms(started)),
+            model=completion.model,
+            prompt_tokens=completion.prompt_tokens,
+            completion_tokens=completion.completion_tokens,
+            timings=AnswerTimings(result.timings, generation_ms, _elapsed_ms(started)),
         )
 
 

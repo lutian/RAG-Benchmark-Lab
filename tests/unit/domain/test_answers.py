@@ -28,4 +28,6 @@ def test_citations_are_valid_only_when_present_and_within_the_sources() -> None:
 def test_abstention_is_the_sentinel_at_the_start_of_the_answer() -> None:
     assert is_abstention(f"{ABSTENTION}")
     assert is_abstention(f"  {ABSTENTION.lower()}: the sources do not say.")
+    assert is_abstention(f"**{ABSTENTION}**: nothing about dates.")
+    assert is_abstention(f"> {ABSTENTION}")
     assert not is_abstention(f"The answer is 42 [1]. Not {ABSTENTION}.")

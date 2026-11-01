@@ -55,10 +55,10 @@ Every `openai.OpenAIError` (HTTP error, timeout, connection refused) becomes `Em
 |-----------|-------|-----|
 | `use_responses_api` | `False` | The OpenAI Responses API exists only at OpenAI; Chat Completions is what every compatible server implements |
 | `temperature` / `reasoning_effort` | only when set in `.env` | Reasoning models reject `temperature` (see [configuration](configuration.md#temperature-vs-reasoning-effort)); nothing is sent by default |
-| `max_retries` / `timeout` | `2` / `LLM_TIMEOUT_SECONDS` | Transient errors are retried by the SDK |
+| `max_retries` / `timeout` | `1` / `LLM_TIMEOUT_SECONDS` | One retry only: a generation that timed out may still be billed upstream |
 | empty API key | replaced by a placeholder | The SDK refuses empty keys; local servers ignore the value |
 
-Every `openai.OpenAIError` becomes `GenerationProviderError` with the model and URL (not the upstream body) → HTTP 502. Token usage comes from the response `usage` when the provider sends it.
+Every `openai.OpenAIError`, and an HTTP 200 carrying an error object instead of choices (how some routers report upstream failures), becomes `GenerationProviderError` with the model and URL (not the upstream body) → HTTP 502. Token usage comes from the response `usage` when the provider sends it.
 
 ## Reranking — `adapters/outbound/reranking/`
 
@@ -140,7 +140,7 @@ The same contract backed by dictionaries, with real rollback (each transaction w
 | `GET` | `/collections/{id}/chunk-sets/{key}/chunks?document_id=` | Chunks with spans, pages and heading paths |
 | `POST` | `/collections/{id}/chunk-sets/{key}/index?rebuild=false` | Embed pending chunks; returns total / already indexed / embedded / seconds |
 | `GET` | `/collections/{id}/index` | Embedding binding and `embedded / total` per chunk set |
-| `POST` | `/collections/{id}/answer` | Body `{question, chunk_set, method, top_k, document_ids}`; returns the answer, `abstained` + `abstention_reason`, `citations` (number → source), `citations_valid`, `invalid_citations`, every `source`, model, token usage and timings |
+| `POST` | `/collections/{id}/answer` | Body `{question, chunk_set, method, top_k, document_ids}`; returns the answer, `abstained` + `abstention_reason`, `citations` (number → source), `citations_valid`, `invalid_citations`, every `source`, model, token usage and timings (`retrieval` stages, `generation_ms`, `total_ms`) |
 | `POST` | `/collections/{id}/search` | Body `{query, chunk_set, method: vector\|fulltext\|hybrid\|hybrid_rerank, top_k, document_ids}`; returns ranked hits with spans, score, `ranks` per stage and timings |
 
 Interactive docs are served at `http://localhost:8000/docs` (OpenAPI).

@@ -55,7 +55,12 @@ def _scores_in_input_order(payload: Any, count: int) -> list[float]:
     scores: dict[int, float] = {}
     for item in results:
         score = item.get("relevance_score", item.get("score")) if isinstance(item, dict) else None
-        if not isinstance(score, int | float) or not isinstance(item.get("index"), int):
+        # bool is an int subclass: reject `true` explicitly.
+        if (
+            not isinstance(score, int | float)
+            or isinstance(score, bool)
+            or not isinstance(item.get("index"), int)
+        ):
             raise RerankerError(f"unexpected reranker result: {str(item)[:200]}")
         scores[item["index"]] = float(score)
     missing = [i for i in range(count) if i not in scores]

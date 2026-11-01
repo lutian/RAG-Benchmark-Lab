@@ -41,7 +41,8 @@ class OpenAICompatibleChatModel:
             base_url=base_url,
             api_key=SecretStr(api_key or _PLACEHOLDER_KEY),
             timeout=timeout_seconds,
-            max_retries=2,
+            # One retry: a generation that timed out may still be billed upstream.
+            max_retries=1,
             use_responses_api=False,
             **dict(options or {}),
         )
@@ -57,7 +58,9 @@ class OpenAICompatibleChatModel:
         ]
         try:
             reply = self._client.invoke(converted)
-        except openai.OpenAIError as error:
+        except (openai.OpenAIError, ValueError, TypeError, KeyError) as error:
+            # ValueError/TypeError/KeyError: HTTP 200 with an error object or no choices
+            # (some routers, e.g. OpenRouter, report upstream failures this way).
             raise GenerationProviderError(
                 f"chat model {self._model_name!r} at {self._base_url} failed: "
                 f"{type(error).__name__}"

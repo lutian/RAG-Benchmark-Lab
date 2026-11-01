@@ -8,6 +8,8 @@ import streamlit as st
 from rag_lab.config import get_settings
 
 INDEXING_TIMEOUT_SECONDS = 1800.0
+# Retrieval + LLM generation (the API retries the provider once on failure).
+GENERATION_TIMEOUT_SECONDS = 600.0
 
 
 class ApiError(Exception):
@@ -132,12 +134,11 @@ class ApiClient:
             "top_k": top_k,
             "document_ids": document_ids,
         }
-        # Generation waits for the LLM: allow the same long timeout as indexing.
         result: dict[str, Any] = self._request(
             "POST",
             f"/collections/{collection_id}/answer",
             json=body,
-            timeout=INDEXING_TIMEOUT_SECONDS,
+            timeout=GENERATION_TIMEOUT_SECONDS,
         )
         return result
 

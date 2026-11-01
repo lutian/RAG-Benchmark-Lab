@@ -39,9 +39,8 @@ def test_answer_with_valid_citations_sources_usage_and_timings() -> None:
     assert [s["text"] for s in body["sources"]] == ["The bank raised rates."]
     assert (body["prompt_tokens"], body["completion_tokens"]) == (10, 5)
     assert body["model"] == "fake-chat-1"
-    assert {"embed_ms", "search_ms", "rerank_ms", "total_ms", "generation_ms"} <= set(
-        body["timings"]
-    )
+    assert set(body["timings"]) == {"retrieval", "generation_ms", "total_ms"}
+    assert set(body["timings"]["retrieval"]) == {"embed_ms", "search_ms", "rerank_ms", "total_ms"}
 
 
 def test_invalid_citations_and_abstentions_are_reported() -> None:
@@ -68,3 +67,18 @@ def test_llm_failure_is_a_bad_gateway_and_validation_applies() -> None:
     assert ask(client, collection_id, "")["status"] == 422
     assert ask(client, collection_id, "x", top_k=0)["status"] == 422
     assert ask(client, collection_id, "x", chunk_set="nope")["status"] == 404
+
+
+def test_answer_honours_the_strategy_and_the_document_filter() -> None:
+    chat = FakeChatModel("ok [1]")
+    client = make_client(chat=chat)
+    collection_id = seeded(client)
+    client.post(f"/collections/{collection_id}/chunk-sets/{KEY}/index")
+    documents = client.get(f"/collections/{collection_id}/documents").json()
+    river = next(d["id"] for d in documents if d["filename"] == "b.txt")
+
+    body = ask(client, collection_id, "bank", method="hybrid", document_ids=[river])
+
+    assert body["method"] == "hybrid"
+    assert [s["document_id"] for s in body["sources"]] == [river]
+    assert "The bank raised rates." not in chat.prompts[0][-1].content

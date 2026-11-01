@@ -18,7 +18,7 @@ MESSAGES = [ChatMessage("system", "rules"), ChatMessage("user", "question")]
 class StubChat:
     """Minimal ``POST /v1/chat/completions`` server that records every request."""
 
-    def __init__(self, status: int = 200, usage: bool = True) -> None:
+    def __init__(self, status: int = 200, usage: bool = True, error_body: bool = False) -> None:
         self.requests: list[dict[str, Any]] = []
         self.paths: list[str] = []
         self.headers: list[dict[str, str]] = []
@@ -30,8 +30,12 @@ class StubChat:
                 stub.requests.append(body)
                 stub.paths.append(self.path)
                 stub.headers.append({k.lower(): v for k, v in self.headers.items()})
-                if status != 200:
-                    payload: dict[str, Any] = {"error": {"message": "boom", "type": "server_error"}}
+                if error_body:
+                    payload: dict[str, Any] = {
+                        "error": {"message": "upstream route failed", "code": 502}
+                    }
+                elif status != 200:
+                    payload = {"error": {"message": "boom", "type": "server_error"}}
                 else:
                     payload = {
                         "id": "chatcmpl-1",
@@ -127,3 +131,12 @@ def test_http_errors_and_unreachable_hosts_are_provider_errors() -> None:
         failing.server.shutdown()
     with pytest.raises(GenerationProviderError):
         OpenAICompatibleChatModel("http://127.0.0.1:9/v1", "", "m", 1).complete(MESSAGES)
+
+
+def test_an_error_object_in_a_200_response_is_a_provider_error() -> None:
+    server = StubChat(error_body=True)
+    try:
+        with pytest.raises(GenerationProviderError, match="my-model"):
+            model(server.url).complete(MESSAGES)
+    finally:
+        server.server.shutdown()

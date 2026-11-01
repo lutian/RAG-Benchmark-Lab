@@ -22,7 +22,7 @@ Assumptions (not user-stated): citations are bracketed source numbers (`[1]`, `[
 | T2 | S1 S2 S4 | inline | done | f06d447 |
 | T3 | S5 | inline | done | 9aa21b3 |
 | T4 | S4 | inline | done | 9aa21b3 |
-| T5 | S6 | inline | done | (docs commit) |
+| T5 | S6 | inline | done | ae4f932 |
 
 - T1 Domain: citation parsing, abstention sentinel, citation validity.
 - T2 Application: `ChatModel` port, prompt builder, `AnswerService` (retrieval → context → LLM → validated answer, timings, token usage).
@@ -35,4 +35,5 @@ Route evidence: sequential dependent units, parent writes inline. Risk: none exp
 ## Log
 
 - L1 (2026-10-31, user): "sim, faz o push. E continua até entregar todos os passos. Só para se precisar de minha definição"
-- L2 Verification: 225 passed with TEST_DATABASE_URL; ruff + mypy --strict clean. E2E uvicorn + pgvector + stub /v1/embeddings + stub /v1/chat/completions with LLM_REASONING_EFFORT=low: answer "The bank raised interest rates [1]." with citations_valid, 2 sources, usage 50+8; the request carried `reasoning_effort: low` and no `temperature`. Not verified: a real LLM provider.
+- L2 Verification: 232 passed with TEST_DATABASE_URL; ruff + mypy --strict clean. E2E uvicorn + pgvector + stub /v1/embeddings + stub /v1/chat/completions with LLM_REASONING_EFFORT=low: answer "The bank raised interest rates [1]." with citations_valid, 2 sources, usage 50+8; the request carried `reasoning_effort: low` and no `temperature`. Not verified: a real LLM provider.
+- L3 Native review (consent per standing instruction): range 244cce9..ae4f932 (rerank fix + phase 5), lineage review-5e4729144c163928, four lenses, **approved**, acknowledged. Advisories fixed afterwards: HTTP 200 error bodies → GenerationProviderError (502); chat max_retries 1; one citation pattern shared by domain and UI; UI flags citations from the API's `invalid_citations`; answer timings nested as `retrieval` + `generation_ms` + `total_ms`; explicit no-evidence branch; separate UI generation timeout; markdown-wrapped NO_ANSWER detected; boolean rerank scores rejected; answer API test with strategy + document filter.

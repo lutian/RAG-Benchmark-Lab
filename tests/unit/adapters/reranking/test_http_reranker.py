@@ -106,6 +106,7 @@ def test_empty_input_makes_no_request(stub_factory: Callable[[Responder], StubRe
         (lambda body: (200, {"unexpected": True}), "unexpected"),
         (lambda body: (200, {"results": ["oops", 1]}), "unexpected"),
         (lambda body: (200, [{"index": 0, "score": "high"}]), "unexpected"),
+        (lambda body: (200, [{"index": 0, "score": True}]), "unexpected"),
     ],
 )
 def test_failures_are_reported_as_reranker_errors(

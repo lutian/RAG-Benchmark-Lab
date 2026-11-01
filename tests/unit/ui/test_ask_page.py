@@ -49,12 +49,9 @@ def answer(**overrides: Any) -> dict[str, Any]:
         "prompt_tokens": 120,
         "completion_tokens": 9,
         "timings": {
-            "embed_ms": 1.0,
-            "search_ms": 2.0,
-            "rerank_ms": 0.0,
-            "total_ms": 3.0,
+            "retrieval": {"embed_ms": 1.0, "search_ms": 2.0, "rerank_ms": 0.0, "total_ms": 3.0},
             "generation_ms": 450.0,
-            "answer_total_ms": 455.0,
+            "total_ms": 455.0,
         },
         **overrides,
     }

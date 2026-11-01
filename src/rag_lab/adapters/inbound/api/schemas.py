@@ -302,9 +302,10 @@ class CitationOut(BaseModel):
     source: SearchHitOut
 
 
-class AnswerTimingsOut(SearchTimingsOut):
+class AnswerTimingsOut(BaseModel):
+    retrieval: SearchTimingsOut
     generation_ms: float
-    answer_total_ms: float
+    total_ms: float = Field(description="Whole request: retrieval + generation.")
 
 
 class AnswerOut(BaseModel):
@@ -355,11 +356,13 @@ class AnswerOut(BaseModel):
             prompt_tokens=answer.prompt_tokens,
             completion_tokens=answer.completion_tokens,
             timings=AnswerTimingsOut(
-                embed_ms=retrieval.embed_ms,
-                search_ms=retrieval.search_ms,
-                rerank_ms=retrieval.rerank_ms,
-                total_ms=retrieval.total_ms,
+                retrieval=SearchTimingsOut(
+                    embed_ms=retrieval.embed_ms,
+                    search_ms=retrieval.search_ms,
+                    rerank_ms=retrieval.rerank_ms,
+                    total_ms=retrieval.total_ms,
+                ),
                 generation_ms=answer.timings.generation_ms,
-                answer_total_ms=answer.timings.total_ms,
+                total_ms=answer.timings.total_ms,
             ),
         )

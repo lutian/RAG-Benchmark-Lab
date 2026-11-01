@@ -43,7 +43,7 @@ def test_short_query_words_are_not_highlighted() -> None:
 def test_answer_citations_become_badges_and_unknown_ones_are_flagged() -> None:
     from rag_lab.ui.highlight import render_answer
 
-    html = render_answer("Rates rose [1, 2] <b>[9]</b>.", valid={1, 2})
+    html = render_answer("Rates rose [1, 2] <b>[9]</b>.", invalid={9})
 
     assert html == (
         'Rates rose <span class="rl-cite">[1, 2]</span> &lt;b&gt;'

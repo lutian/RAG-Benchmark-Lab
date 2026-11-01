@@ -98,10 +98,10 @@ with answer_column:
     if result["abstained"]:
         st.warning(ABSTENTION_REASONS.get(result["abstention_reason"], "Abstained."))
     if result["answer"]:
-        valid = set(range(1, len(result["sources"]) + 1))
+        invalid = set(result["invalid_citations"])
         st.markdown(
             f'<div class="rl-card"><div class="rl-answer">'
-            f"{render_answer(result['answer'], valid)}</div></div>",
+            f"{render_answer(result['answer'], invalid)}</div></div>",
             unsafe_allow_html=True,
         )
     if not result["abstained"]:
@@ -119,7 +119,8 @@ with answer_column:
     )
     st.markdown(
         f'<div class="rl-card-meta">{html.escape(result["model"] or "no LLM call")}{tokens} · '
-        f"retrieval {timings['total_ms']:.0f} ms · generation {timings['generation_ms']:.0f} ms"
+        f"retrieval {timings['retrieval']['total_ms']:.0f} ms · "
+        f"generation {timings['generation_ms']:.0f} ms"
         "</div>",
         unsafe_allow_html=True,
     )

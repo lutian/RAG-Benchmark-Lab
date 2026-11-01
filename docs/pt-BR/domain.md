@@ -132,7 +132,7 @@ Um chunk bem posicionado pelos **dois** métodos vence um chunk que ficou em pri
 |--------|---------------|
 | `extract_citations(text)` | Números citados, sem repetição, na ordem do primeiro uso. Colchetes colados a uma palavra (`list[0]`) ou com não inteiros (`[1.5]`, `[a]`) não são citações |
 | `check_citations(text, n)` | `CitationCheck(cited, invalid)`; `valid` significa ao menos uma citação **e** todos os números em `1..n` |
-| `is_abstention(text)` | A resposta começa com `NO_ANSWER` (sem diferenciar maiúsculas) |
+| `is_abstention(text)` | A resposta começa com `NO_ANSWER` (sem diferenciar maiúsculas e ignorando marcações de markdown como `**` ou `>`) |
 
 **Por que determinístico?** A meta do projeto "citações válidas ≥ 95%" precisa ser barata e reproduzível. O parsing mede *se as citações apontam para fontes reais*; se a fonte citada de fato sustenta a frase é uma questão semântica, deixada para o juiz LLM opcional (fase de avaliação).
 

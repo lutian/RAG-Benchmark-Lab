@@ -13,20 +13,21 @@ ABSTENTION = "NO_ANSWER"
 
 # "[3]" or "[1, 2]": numbers only and not glued to a word, so "list[0]" or "[1.5]" are
 # not citations.
-_CITATION = re.compile(r"(?<!\w)\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
+CITATION_PATTERN = re.compile(r"(?<!\w)\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
 
 
 def extract_citations(text: str) -> tuple[int, ...]:
     """Cited source numbers, unique, in order of first appearance."""
     seen: dict[int, None] = {}
-    for match in _CITATION.finditer(text):
+    for match in CITATION_PATTERN.finditer(text):
         for number in match.group(1).split(","):
             seen.setdefault(int(number), None)
     return tuple(seen)
 
 
 def is_abstention(text: str) -> bool:
-    return text.strip().upper().startswith(ABSTENTION)
+    """The reply starts with the sentinel, ignoring markdown wrapping (``**``, ``>``, ``#``)."""
+    return text.lstrip(" \t\n*_>#`\"'").upper().startswith(ABSTENTION)
 
 
 @dataclass(frozen=True, slots=True)
