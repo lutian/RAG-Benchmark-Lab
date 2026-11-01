@@ -242,14 +242,18 @@ class SearchIn(BaseModel):
 class SearchHitOut(ChunkOut):
     rank: int
     score: float = Field(
-        description="vector: cosine similarity; fulltext: ts_rank_cd; hybrid: RRF score."
+        description="vector: cosine similarity; fulltext: ts_rank_cd; hybrid: RRF score; "
+        "hybrid_rerank: reranker score."
     )
-    ranks: dict[str, int] = Field(description="1-based rank per underlying method.")
+    ranks: dict[str, int] = Field(
+        description="1-based rank per stage: vector, fulltext, and hybrid (before reranking)."
+    )
 
 
 class SearchTimingsOut(BaseModel):
     embed_ms: float
     search_ms: float
+    rerank_ms: float
     total_ms: float
 
 
@@ -278,6 +282,7 @@ class SearchOut(BaseModel):
             timings=SearchTimingsOut(
                 embed_ms=result.timings.embed_ms,
                 search_ms=result.timings.search_ms,
+                rerank_ms=result.timings.rerank_ms,
                 total_ms=result.timings.total_ms,
             ),
         )

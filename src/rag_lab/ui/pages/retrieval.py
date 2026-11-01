@@ -1,7 +1,8 @@
 """Retrieval page: run one query with every search method and compare them side by side.
 
 Each column is one method. Every hit shows its rank, score and the rank the *other*
-methods gave the same chunk, which is what explains why a method won or lost.
+stages gave the same chunk, which is what explains why a method won or lost (and, for
+the reranked column, how far the reranker moved it from its hybrid position).
 """
 
 import html
@@ -14,7 +15,13 @@ from rag_lab.ui import api_client
 from rag_lab.ui.highlight import highlight_terms
 from rag_lab.ui.theme import apply_theme
 
-METHODS = {"vector": "Vector", "fulltext": "Full-text", "hybrid": "Hybrid (RRF)"}
+METHODS = {
+    "vector": "Vector",
+    "fulltext": "Full-text",
+    "hybrid": "Hybrid (RRF)",
+    "hybrid_rerank": "Hybrid + rerank",
+}
+STAGES = {**METHODS, "hybrid": "Hybrid"}
 
 apply_theme()
 client = api_client.get_client()
@@ -31,7 +38,7 @@ def _hit_card(hit: dict[str, Any], query: str, filenames: dict[str, str]) -> str
         pages = ", ".join(str(p) for p in hit["page_numbers"])
         location = f"p. {pages}" + (f" · {location}" if location else "")
     ranks = "".join(
-        f'<span class="rl-badge neutral">{html.escape(METHODS.get(name, name))} #{rank}</span>'
+        f'<span class="rl-badge neutral">{html.escape(STAGES.get(name, name))} #{rank}</span>'
         for name, rank in hit["ranks"].items()
     )
     filename = html.escape(filenames.get(hit["document_id"], hit["document_id"]))
@@ -61,7 +68,7 @@ with st.sidebar:
     top_k = st.slider("Top k", 1, 30, 5)
     try:
         documents = client.list_documents(collection["id"])
-    except api_client.ApiError as error:
+    except (api_client.ApiError, httpx.HTTPError) as error:
         _fail(error)
     filenames = {d["id"]: d["filename"] for d in documents}
     selected = st.multiselect(
@@ -77,7 +84,7 @@ with st.form("search"):
 
 if not submitted or not query.strip():
     st.caption(
-        "Runs vector, full-text and hybrid search on the same chunk set. "
+        "Runs vector, full-text, hybrid and reranked hybrid search on the same chunk set. "
         f"Full-text language: {collection['fulltext_language']}."
     )
     st.stop()
@@ -90,14 +97,16 @@ for column, (method, label) in zip(columns, METHODS.items(), strict=True):
             result = client.search(
                 collection["id"], query, chunk_set, method, top_k, selected or None
             )
-        except api_client.ApiError as error:
+        except (api_client.ApiError, httpx.HTTPError) as error:
             st.warning(str(error))
             continue
         timings = result["timings"]
         st.markdown(
             f'<div class="rl-card-meta">{len(result["hits"])} hits · '
             f"{timings['total_ms']:.1f} ms (embed {timings['embed_ms']:.1f} · "
-            f"search {timings['search_ms']:.1f})</div>",
+            f"search {timings['search_ms']:.1f}"
+            + (f" · rerank {timings['rerank_ms']:.1f}" if timings["rerank_ms"] else "")
+            + ")</div>",
             unsafe_allow_html=True,
         )
         if not result["hits"]:

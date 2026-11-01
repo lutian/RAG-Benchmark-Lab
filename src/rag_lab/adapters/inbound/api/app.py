@@ -11,6 +11,7 @@ from rag_lab.application.errors import (
     InvalidRequestError,
     NotFoundError,
     RagLabError,
+    RerankerError,
     UnsupportedDocumentError,
     UploadTooLargeError,
 )
@@ -26,6 +27,7 @@ _STATUS_BY_ERROR: tuple[tuple[type[RagLabError], int], ...] = (
     (DocumentParsingError, status.HTTP_422_UNPROCESSABLE_CONTENT),
     (InvalidRequestError, status.HTTP_422_UNPROCESSABLE_CONTENT),
     (EmbeddingProviderError, status.HTTP_502_BAD_GATEWAY),
+    (RerankerError, status.HTTP_502_BAD_GATEWAY),
 )
 
 

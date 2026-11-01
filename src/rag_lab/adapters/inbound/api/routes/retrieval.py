@@ -14,8 +14,10 @@ router = APIRouter(prefix="/collections", tags=["retrieval"])
 def search(collection_id: UUID, body: SearchIn, container: ContainerDep) -> SearchOut:
     """Rank chunks of ``chunk_set`` for ``query``.
 
-    ``vector`` and ``hybrid`` need the chunk set fully indexed with the configured
-    embedding model (409 otherwise); ``fulltext`` works right after upload.
+    ``vector``, ``hybrid`` and ``hybrid_rerank`` need the chunk set fully indexed with
+    the configured embedding model (409 otherwise); ``fulltext`` works right after
+    upload. ``hybrid_rerank`` reorders the best ``RERANK_CANDIDATES`` hybrid hits with
+    the configured reranker (502 if it fails).
     """
     result = container.retrieval.search(
         collection_id,

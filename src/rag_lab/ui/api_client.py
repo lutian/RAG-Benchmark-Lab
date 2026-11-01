@@ -95,7 +95,7 @@ class ApiClient:
         result: dict[str, Any] = self._request("GET", f"/collections/{collection_id}/index")
         return result
 
-    def search(
+    def search(  # method: vector | fulltext | hybrid | hybrid_rerank
         self,
         collection_id: str,
         query: str,

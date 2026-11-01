@@ -13,11 +13,15 @@ from rag_lab.application.ports.repositories import UnitOfWork
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def migrate(url: str) -> None:
+def alembic_config(url: str) -> Config:
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "migrations"))
     config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
-    command.upgrade(config, "head")
+    return config
+
+
+def migrate(url: str) -> None:
+    command.upgrade(alembic_config(url), "head")
 
 
 def postgres_uow_factory(url: str) -> Iterator[Callable[[], UnitOfWork]]:

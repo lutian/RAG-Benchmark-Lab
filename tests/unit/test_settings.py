@@ -165,3 +165,18 @@ def test_retrieval_settings_have_defaults_and_validate_the_language() -> None:
         Settings(_env_file=None, default_fulltext_language="klingon")  # type: ignore[call-arg]
     with pytest.raises(ValidationError):
         Settings(_env_file=None, hybrid_rrf_k=0)  # type: ignore[call-arg]
+
+
+def test_rerank_candidates_default_and_reranker_wiring() -> None:
+    from rag_lab.adapters.outbound.reranking.cross_encoder import CrossEncoderReranker
+    from rag_lab.adapters.outbound.reranking.http_api import HttpReranker
+    from rag_lab.bootstrap import build_reranker
+
+    local = Settings(_env_file=None)  # type: ignore[call-arg]
+    api = Settings(  # type: ignore[call-arg]
+        _env_file=None, reranker_provider="api", reranker_base_url="http://rerank:8080/v1"
+    )
+
+    assert local.rerank_candidates == 30
+    assert isinstance(build_reranker(local), CrossEncoderReranker)
+    assert isinstance(build_reranker(api), HttpReranker)

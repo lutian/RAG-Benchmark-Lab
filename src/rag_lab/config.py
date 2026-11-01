@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     # Retrieval
     retrieval_candidates: int = Field(default=50, gt=0)  # per method, before hybrid fusion
     hybrid_rrf_k: int = Field(default=60, gt=0)  # Reciprocal Rank Fusion constant
+    rerank_candidates: int = Field(default=30, gt=0)  # fused chunks handed to the reranker
 
     # UI -> API
     api_url: str = "http://localhost:8000"

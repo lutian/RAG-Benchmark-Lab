@@ -31,7 +31,7 @@ def test_full_text_search_returns_ranked_hits_with_spans_and_timings(client: Tes
     assert (hit["start"], hit["end"], hit["rank"]) == (0, 22, 1)
     assert hit["ranks"] == {"fulltext": 1}
     assert hit["score"] > 0
-    assert set(body["timings"]) == {"embed_ms", "search_ms", "total_ms"}
+    assert set(body["timings"]) == {"embed_ms", "search_ms", "rerank_ms", "total_ms"}
 
 
 def test_hybrid_is_the_default_and_needs_an_indexed_chunk_set(client: TestClient) -> None:
@@ -106,3 +106,42 @@ def test_collection_language_defaults_from_settings_and_is_validated(client: Tes
 
 def test_blank_collection_name_is_a_validation_error(client: TestClient) -> None:
     assert client.post("/collections", json={"name": "   "}).status_code == 422
+
+
+def test_hybrid_rerank_reports_reranker_scores_and_hybrid_rank() -> None:
+    from tests.fakes import FakeReranker
+    from tests.unit.adapters.conftest import make_client
+
+    client = make_client(reranker=FakeReranker(prefer="river"))
+    collection_id = seeded(client)
+    client.post(f"/collections/{collection_id}/chunk-sets/{KEY}/index")
+
+    response = client.post(
+        f"/collections/{collection_id}/search",
+        json={"query": "bank river", "chunk_set": KEY, "method": "hybrid_rerank"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    top = body["hits"][0]
+    assert top["text"] == "A quiet river."
+    assert top["score"] == 1.0
+    assert "hybrid" in top["ranks"]
+    assert body["timings"]["rerank_ms"] >= 0
+
+
+def test_reranker_failure_is_a_bad_gateway() -> None:
+    from tests.fakes import FakeReranker
+    from tests.unit.adapters.conftest import make_client
+
+    client = make_client(reranker=FakeReranker(fail=True))
+    collection_id = seeded(client)
+    client.post(f"/collections/{collection_id}/chunk-sets/{KEY}/index")
+
+    response = client.post(
+        f"/collections/{collection_id}/search",
+        json={"query": "bank", "chunk_set": KEY, "method": "hybrid_rerank"},
+    )
+
+    assert response.status_code == 502
+    assert "outage" in response.json()["detail"]

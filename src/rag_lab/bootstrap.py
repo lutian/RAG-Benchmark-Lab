@@ -12,8 +12,11 @@ from rag_lab.adapters.outbound.embeddings.openai_compatible import OpenAICompati
 from rag_lab.adapters.outbound.parsers.registry import ParserRegistry
 from rag_lab.adapters.outbound.persistence.memory import InMemoryUnitOfWork
 from rag_lab.adapters.outbound.persistence.postgres import SqlAlchemyUnitOfWork, create_db_engine
+from rag_lab.adapters.outbound.reranking.cross_encoder import CrossEncoderReranker
+from rag_lab.adapters.outbound.reranking.http_api import HttpReranker
 from rag_lab.application.ports.embeddings import Embedder
 from rag_lab.application.ports.repositories import UnitOfWork
+from rag_lab.application.ports.reranking import Reranker
 from rag_lab.application.services.indexing import IndexingService
 from rag_lab.application.services.ingestion import IngestionService
 from rag_lab.application.services.retrieval import RetrievalService
@@ -50,20 +53,47 @@ def build_embedder(settings: Settings) -> Embedder:
     )
 
 
+def build_reranker(settings: Settings) -> Reranker:
+    """Reranker from ``RERANKER_*`` settings (a local model is loaded on first use)."""
+    if settings.reranker_provider == "api":
+        return HttpReranker(
+            base_url=settings.reranker_base_url,
+            model=settings.reranker_model,
+            api_key=settings.reranker_api_key.get_secret_value(),
+            timeout_seconds=settings.llm_timeout_seconds,
+        )
+    return CrossEncoderReranker(settings.reranker_model)
+
+
 def build_container(settings: Settings) -> Container:
-    """Production wiring: PostgreSQL persistence and the configured embeddings provider."""
+    """Production wiring: PostgreSQL persistence and the configured providers."""
     engine = create_db_engine(settings.database_url)
-    return _assemble(settings, lambda: SqlAlchemyUnitOfWork(engine), build_embedder(settings))
+    return _assemble(
+        settings,
+        lambda: SqlAlchemyUnitOfWork(engine),
+        build_embedder(settings),
+        build_reranker(settings),
+    )
 
 
-def build_in_memory_container(settings: Settings, embedder: Embedder | None = None) -> Container:
+def build_in_memory_container(
+    settings: Settings, embedder: Embedder | None = None, reranker: Reranker | None = None
+) -> Container:
     """Wiring without a database, for tests and quick demos."""
     uow = InMemoryUnitOfWork()
-    return _assemble(settings, lambda: uow, embedder or build_embedder(settings))
+    return _assemble(
+        settings,
+        lambda: uow,
+        embedder or build_embedder(settings),
+        reranker or build_reranker(settings),
+    )
 
 
 def _assemble(
-    settings: Settings, uow_factory: Callable[[], UnitOfWork], embedder: Embedder
+    settings: Settings,
+    uow_factory: Callable[[], UnitOfWork],
+    embedder: Embedder,
+    reranker: Reranker,
 ) -> Container:
     ingestion = IngestionService(
         uow_factory=uow_factory,
@@ -78,5 +108,7 @@ def _assemble(
         embedder=embedder,
         candidates=settings.retrieval_candidates,
         rrf_k=settings.hybrid_rrf_k,
+        reranker=reranker,
+        rerank_candidates=settings.rerank_candidates,
     )
     return Container(settings, ingestion, indexing, retrieval, default_chunking_configs(settings))

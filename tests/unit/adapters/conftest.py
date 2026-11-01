@@ -8,12 +8,16 @@ from fastapi.testclient import TestClient
 from rag_lab.adapters.inbound.api.app import create_app
 from rag_lab.bootstrap import build_in_memory_container
 from rag_lab.config import Settings
-from tests.fakes import FakeEmbedder
+from tests.fakes import FakeEmbedder, FakeReranker
 
 
-def make_client(embedder: FakeEmbedder | None = None) -> TestClient:
+def make_client(
+    embedder: FakeEmbedder | None = None, reranker: FakeReranker | None = None
+) -> TestClient:
     settings = Settings(_env_file=None, max_upload_mb=1)  # type: ignore[call-arg]
-    container = build_in_memory_container(settings, embedder=embedder or FakeEmbedder())
+    container = build_in_memory_container(
+        settings, embedder=embedder or FakeEmbedder(), reranker=reranker or FakeReranker()
+    )
     return TestClient(create_app(container))
 
 

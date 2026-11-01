@@ -54,13 +54,23 @@ class FakeClient:
         self.calls.append((method, top_k, document_ids))
         if method == "vector":
             raise api_client.ApiError("chunk set 'fixed-200-0' is not fully indexed (0/1 chunks)")
-        ranks = {"fulltext": 1} if method == "fulltext" else {"vector": 4, "fulltext": 1}
+        ranks = {
+            "fulltext": {"fulltext": 1},
+            "hybrid": {"vector": 4, "fulltext": 1},
+            "hybrid_rerank": {"vector": 4, "fulltext": 1, "hybrid": 3},
+        }[method]
+        rerank_ms = 7.25 if method == "hybrid_rerank" else 0.0
         return {
             "query": query,
             "chunk_set": chunk_set,
             "method": method,
             "hits": [{**HIT, "ranks": ranks}],
-            "timings": {"embed_ms": 0.0, "search_ms": 1.5, "total_ms": 2.0},
+            "timings": {
+                "embed_ms": 0.0,
+                "search_ms": 1.5,
+                "rerank_ms": rerank_ms,
+                "total_ms": 2.0 + rerank_ms,
+            },
         }
 
 
@@ -77,11 +87,13 @@ def test_compares_every_method_for_one_query(fake: FakeClient) -> None:
     app.button[0].click().run()
 
     assert not app.exception
-    assert [call[0] for call in fake.calls] == ["vector", "fulltext", "hybrid"]
+    assert [call[0] for call in fake.calls] == ["vector", "fulltext", "hybrid", "hybrid_rerank"]
     rendered = " ".join(md.value for md in app.markdown)
     assert "rates.txt" in rendered
     assert '<mark class="rl-evidence">bank</mark>' in rendered
     assert "Vector #4" in rendered
+    assert "Hybrid #3" in rendered
+    assert "rerank 7.2" in rendered
     assert "p. 3 · Rates" in rendered
     assert any("not fully indexed" in warning.value for warning in app.warning)
 
