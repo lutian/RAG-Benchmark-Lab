@@ -6,9 +6,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from rag_lab.application.services.answering import Answer
 from rag_lab.application.services.indexing import IndexingReport, IndexStatus
 from rag_lab.application.services.ingestion import IngestionResult
-from rag_lab.application.services.retrieval import MAX_TOP_K, SearchResult
+from rag_lab.application.services.retrieval import MAX_TOP_K, SearchHit, SearchResult
 from rag_lab.domain.chunking import ChunkingConfig, ChunkingStrategy
 from rag_lab.domain.chunks import Chunk
 from rag_lab.domain.collections import Collection
@@ -284,5 +285,81 @@ class SearchOut(BaseModel):
                 search_ms=result.timings.search_ms,
                 rerank_ms=result.timings.rerank_ms,
                 total_ms=result.timings.total_ms,
+            ),
+        )
+
+
+class AnswerIn(BaseModel):
+    question: str = Field(min_length=1, max_length=2_000)
+    chunk_set: str = Field(description="Chunking config key, e.g. recursive-800-120.")
+    method: SearchMethod = SearchMethod.HYBRID
+    top_k: int = Field(default=5, ge=1, le=MAX_TOP_K, description="Sources given to the LLM.")
+    document_ids: list[UUID] | None = None
+
+
+class CitationOut(BaseModel):
+    number: int = Field(description="Source number as written in the answer, e.g. 2 for [2].")
+    source: SearchHitOut
+
+
+class AnswerTimingsOut(SearchTimingsOut):
+    generation_ms: float
+    answer_total_ms: float
+
+
+class AnswerOut(BaseModel):
+    question: str
+    chunk_set: str
+    method: SearchMethod
+    answer: str
+    abstained: bool
+    abstention_reason: str | None = Field(
+        description="no_evidence_retrieved (retrieval found nothing) or model_abstained."
+    )
+    citations: list[CitationOut]
+    citations_valid: bool = Field(
+        description="At least one citation and all of them point to provided sources."
+    )
+    invalid_citations: list[int]
+    sources: list[SearchHitOut] = Field(description="Every chunk given to the LLM, numbered 1..n.")
+    model: str | None
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    timings: AnswerTimingsOut
+
+    @classmethod
+    def from_answer(cls, answer: Answer) -> "AnswerOut":
+        def hit_out(hit: SearchHit) -> SearchHitOut:
+            return SearchHitOut(
+                **ChunkOut.from_domain(hit.chunk).model_dump(),
+                rank=hit.rank,
+                score=hit.score,
+                ranks=dict(hit.ranks),
+            )
+
+        retrieval = answer.timings.retrieval
+        return cls(
+            question=answer.question,
+            chunk_set=answer.config_key,
+            method=answer.method,
+            answer=answer.text,
+            abstained=answer.abstained,
+            abstention_reason=answer.abstention_reason,
+            citations=[
+                CitationOut(number=c.number, source=hit_out(c.hit)) for c in answer.citations
+            ],
+            citations_valid=answer.citation_check.valid,
+            invalid_citations=list(answer.citation_check.invalid),
+            sources=[hit_out(hit) for hit in answer.sources],
+            model=answer.model,
+            prompt_tokens=answer.prompt_tokens,
+            completion_tokens=answer.completion_tokens,
+            timings=AnswerTimingsOut(
+                embed_ms=retrieval.embed_ms,
+                search_ms=retrieval.search_ms,
+                rerank_ms=retrieval.rerank_ms,
+                total_ms=retrieval.total_ms,
+                generation_ms=answer.timings.generation_ms,
+                answer_total_ms=answer.timings.total_ms,
             ),
         )

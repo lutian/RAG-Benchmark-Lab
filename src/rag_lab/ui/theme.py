@@ -74,6 +74,16 @@ mark[class^="rl-"] { padding: 0; border-radius: 2px; color: inherit; }
 
 .rl-snippet { font-size: 0.85rem; line-height: 1.55; margin-top: 8px; white-space: pre-wrap; }
 
+.rl-cite {
+  color: var(--rl-accent);
+  font-weight: 600;
+  font-size: 0.8em;
+  vertical-align: super;
+}
+.rl-cite.invalid { color: #B91C1C; text-decoration: underline wavy; }
+.rl-answer { font-size: 1rem; line-height: 1.65; white-space: pre-wrap; }
+.rl-badge.warn { background: #FEF3C7; color: #92400E; }
+
 .rl-brand { font-weight: 700; font-size: 1.4rem; letter-spacing: -0.02em; }
 .rl-brand span { color: var(--rl-accent); }
 </style>

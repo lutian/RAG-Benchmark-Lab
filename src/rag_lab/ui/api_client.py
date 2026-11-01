@@ -116,6 +116,31 @@ class ApiClient:
         )
         return result
 
+    def answer(
+        self,
+        collection_id: str,
+        question: str,
+        chunk_set: str,
+        method: str,
+        top_k: int = 5,
+        document_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "question": question,
+            "chunk_set": chunk_set,
+            "method": method,
+            "top_k": top_k,
+            "document_ids": document_ids,
+        }
+        # Generation waits for the LLM: allow the same long timeout as indexing.
+        result: dict[str, Any] = self._request(
+            "POST",
+            f"/collections/{collection_id}/answer",
+            json=body,
+            timeout=INDEXING_TIMEOUT_SECONDS,
+        )
+        return result
+
 
 @st.cache_resource
 def _cached_client(base_url: str) -> ApiClient:

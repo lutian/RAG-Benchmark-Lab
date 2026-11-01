@@ -56,3 +56,29 @@ def highlight_terms(text: str, query: str, min_length: int = 3) -> str:
         position = match.end()
     parts.append(html.escape(text[position:], quote=False))
     return "".join(parts)
+
+
+_CITATION = re.compile(r"(?<!\w)\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
+
+
+def render_answer(text: str, valid: set[int]) -> str:
+    """Escape an answer and turn ``[n]`` citations into badges.
+
+    A citation group with a number outside ``valid`` is flagged, so a hallucinated
+    source is visible at a glance.
+    """
+    parts: list[str] = []
+    position = 0
+    for match in _CITATION.finditer(text):
+        parts.append(html.escape(text[position : match.start()], quote=False))
+        numbers = {int(n) for n in match.group(1).split(",")}
+        label = html.escape(match.group(), quote=False)
+        if numbers <= valid:
+            parts.append(f'<span class="rl-cite">{label}</span>')
+        else:
+            parts.append(
+                f'<span class="rl-cite invalid" title="not a provided source">{label}</span>'
+            )
+        position = match.end()
+    parts.append(html.escape(text[position:], quote=False))
+    return "".join(parts)

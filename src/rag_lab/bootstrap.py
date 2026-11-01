@@ -9,14 +9,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from rag_lab.adapters.outbound.embeddings.openai_compatible import OpenAICompatibleEmbedder
+from rag_lab.adapters.outbound.generation.openai_compatible import OpenAICompatibleChatModel
 from rag_lab.adapters.outbound.parsers.registry import ParserRegistry
 from rag_lab.adapters.outbound.persistence.memory import InMemoryUnitOfWork
 from rag_lab.adapters.outbound.persistence.postgres import SqlAlchemyUnitOfWork, create_db_engine
 from rag_lab.adapters.outbound.reranking.cross_encoder import CrossEncoderReranker
 from rag_lab.adapters.outbound.reranking.http_api import HttpReranker
 from rag_lab.application.ports.embeddings import Embedder
+from rag_lab.application.ports.generation import ChatModel
 from rag_lab.application.ports.repositories import UnitOfWork
 from rag_lab.application.ports.reranking import Reranker
+from rag_lab.application.services.answering import AnswerService
 from rag_lab.application.services.indexing import IndexingService
 from rag_lab.application.services.ingestion import IngestionService
 from rag_lab.application.services.retrieval import RetrievalService
@@ -30,6 +33,7 @@ class Container:
     ingestion: IngestionService
     indexing: IndexingService
     retrieval: RetrievalService
+    answering: AnswerService
     default_chunking_configs: tuple[ChunkingConfig, ...]
 
 
@@ -53,6 +57,17 @@ def build_embedder(settings: Settings) -> Embedder:
     )
 
 
+def build_chat_model(settings: Settings) -> ChatModel:
+    """Chat LLM from ``LLM_*`` settings; only the configured generation options are sent."""
+    return OpenAICompatibleChatModel(
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key.get_secret_value(),
+        model=settings.llm_model,
+        timeout_seconds=settings.llm_timeout_seconds,
+        options=settings.llm_generation_options(),
+    )
+
+
 def build_reranker(settings: Settings) -> Reranker:
     """Reranker from ``RERANKER_*`` settings (a local model is loaded on first use)."""
     if settings.reranker_provider == "api":
@@ -73,11 +88,15 @@ def build_container(settings: Settings) -> Container:
         lambda: SqlAlchemyUnitOfWork(engine),
         build_embedder(settings),
         build_reranker(settings),
+        build_chat_model(settings),
     )
 
 
 def build_in_memory_container(
-    settings: Settings, embedder: Embedder | None = None, reranker: Reranker | None = None
+    settings: Settings,
+    embedder: Embedder | None = None,
+    reranker: Reranker | None = None,
+    chat: ChatModel | None = None,
 ) -> Container:
     """Wiring without a database, for tests and quick demos."""
     uow = InMemoryUnitOfWork()
@@ -86,6 +105,7 @@ def build_in_memory_container(
         lambda: uow,
         embedder or build_embedder(settings),
         reranker or build_reranker(settings),
+        chat or build_chat_model(settings),
     )
 
 
@@ -94,6 +114,7 @@ def _assemble(
     uow_factory: Callable[[], UnitOfWork],
     embedder: Embedder,
     reranker: Reranker,
+    chat: ChatModel,
 ) -> Container:
     ingestion = IngestionService(
         uow_factory=uow_factory,
@@ -111,4 +132,7 @@ def _assemble(
         reranker=reranker,
         rerank_candidates=settings.rerank_candidates,
     )
-    return Container(settings, ingestion, indexing, retrieval, default_chunking_configs(settings))
+    answering = AnswerService(retrieval=retrieval, chat=chat)
+    return Container(
+        settings, ingestion, indexing, retrieval, answering, default_chunking_configs(settings)
+    )

@@ -3,11 +3,12 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from rag_lab.adapters.inbound.api.routes import collections, indexing, retrieval
+from rag_lab.adapters.inbound.api.routes import answering, collections, indexing, retrieval
 from rag_lab.application.errors import (
     ConflictError,
     DocumentParsingError,
     EmbeddingProviderError,
+    GenerationProviderError,
     InvalidRequestError,
     NotFoundError,
     RagLabError,
@@ -28,6 +29,7 @@ _STATUS_BY_ERROR: tuple[tuple[type[RagLabError], int], ...] = (
     (InvalidRequestError, status.HTTP_422_UNPROCESSABLE_CONTENT),
     (EmbeddingProviderError, status.HTTP_502_BAD_GATEWAY),
     (RerankerError, status.HTTP_502_BAD_GATEWAY),
+    (GenerationProviderError, status.HTTP_502_BAD_GATEWAY),
 )
 
 
@@ -62,4 +64,5 @@ def create_app(container: Container | None = None) -> FastAPI:
     app.include_router(collections.router)
     app.include_router(indexing.router)
     app.include_router(retrieval.router)
+    app.include_router(answering.router)
     return app
