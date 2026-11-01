@@ -3,6 +3,7 @@
     rag-lab benchmark --collection handbook [--method hybrid ...] [--generation] --out reports/
     rag-lab runs --collection handbook
     rag-lab report --collection handbook --run <run-id> --out reports/
+    rag-lab demo                     # sample corpus: ingest, index, golden import, benchmark
 
 Uses the same composition root as the API (``.env`` settings, PostgreSQL), so a
 benchmark run from the CLI is stored and visible in the UI as well. Each run writes a
@@ -51,6 +52,15 @@ def _parser() -> argparse.ArgumentParser:
     report.add_argument("--collection", required=True)
     report.add_argument("--run", required=True, type=UUID, help="run id")
     report.add_argument("--out", type=Path, default=Path("reports"))
+    demo = commands.add_parser(
+        "demo", help="ingest, index and benchmark the sample corpus end to end"
+    )
+    demo.add_argument("--collection", default="sample-handbook")
+    demo.add_argument("--corpus", type=Path, default=Path("examples/corpus"))
+    demo.add_argument("--golden", type=Path, default=Path("examples/golden.json"))
+    demo.add_argument("--generation", action="store_true", help="also evaluate answers")
+    demo.add_argument("--judge", action="store_true", help="LLM judge (needs --generation)")
+    demo.add_argument("--out", type=Path, default=Path("reports"))
     return parser
 
 
@@ -84,11 +94,18 @@ def _benchmark(args: argparse.Namespace, container: Container) -> int:
     except ValueError as error:
         raise RagLabError(str(error)) from error
 
+    interactive = sys.stderr.isatty()
+
     def progress(done: int, total: int) -> None:
-        print(f"\r{done}/{total} queries", end="", file=sys.stderr, flush=True)
+        # A live counter on a terminal; one line per 10% in logs and pipes.
+        if interactive:
+            print(f"\r{done}/{total} queries", end="", file=sys.stderr, flush=True)
+        elif done == total or done % max(1, total // 10) == 0:
+            print(f"{done}/{total} queries", file=sys.stderr, flush=True)
 
     run = container.benchmark.run(collection.id, config, progress)
-    print(file=sys.stderr)
+    if interactive:
+        print(file=sys.stderr)
     markdown, data = _write(run, collection, args.out)
     k = headline_k(run.config)
     best = best_strategy(run.summaries, k)
@@ -115,9 +132,42 @@ def _report(args: argparse.Namespace, container: Container) -> int:
     return 0
 
 
+def _demo(args: argparse.Namespace, container: Container) -> int:
+    """Idempotent: re-running reuses the collection, skips duplicate files and indexed
+    chunks, imports the golden dataset only once, then runs a new benchmark."""
+    files = sorted(p for p in args.corpus.iterdir() if p.is_file()) if args.corpus.is_dir() else []
+    if not files:
+        raise RagLabError(f"no documents found in {args.corpus}")
+    existing = [c for c in container.ingestion.list_collections() if c.name == args.collection]
+    collection = (
+        existing[0]
+        if existing
+        else container.ingestion.create_collection(
+            args.collection, container.default_chunking_configs
+        )
+    )
+    print(f"collection {collection.name}: {len(collection.chunking_configs)} chunk sets")
+    for path in files:
+        result = container.ingestion.ingest_document(collection.id, path.name, path.read_bytes())
+        print(f"  {'kept' if result.duplicate else 'ingested'} {path.name}")
+    for config in collection.chunking_configs:
+        report = container.indexing.index_chunk_set(collection.id, config.key)
+        print(f"  indexed {config.key}: {report.embedded} new of {report.total} chunks")
+    if not container.golden.questions(collection.id):
+        imported = container.golden.import_(
+            collection.id, json.loads(args.golden.read_text(encoding="utf-8"))
+        )
+        print(f"  golden dataset: {imported.imported} questions ({imported.skipped} skipped)")
+    benchmark = argparse.Namespace(
+        collection=collection.name, chunk_sets=None, methods=None, ks=None,
+        generation=args.generation, judge=args.judge, answer_top_k=5, out=args.out,
+    )  # fmt: skip
+    return _benchmark(benchmark, container)
+
+
 def main(argv: Sequence[str] | None = None, container: Container | None = None) -> int:
     args = _parser().parse_args(argv)
-    handlers = {"benchmark": _benchmark, "runs": _runs, "report": _report}
+    handlers = {"benchmark": _benchmark, "runs": _runs, "report": _report, "demo": _demo}
     try:
         return handlers[args.command](args, container or build_container(get_settings()))
     except RagLabError as error:

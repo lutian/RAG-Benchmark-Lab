@@ -83,3 +83,28 @@ def test_best_strategy_uses_the_requested_k(
           "--k", "3", "--out", str(tmp_path)], container)  # fmt: skip
 
     assert "(Recall@3 100.0%" in capsys.readouterr().out
+
+
+def test_demo_runs_the_sample_corpus_end_to_end_and_is_idempotent(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    container = build_in_memory_container(
+        settings, FakeEmbedder(), FakeReranker(), FakeChatModel("ok [1]")
+    )
+    examples = Path(__file__).resolve().parents[2] / "examples"
+    argv = ["demo", "--corpus", str(examples / "corpus"), "--golden",
+            str(examples / "golden.json"), "--out", str(tmp_path)]  # fmt: skip
+
+    first = main(argv, container)
+    out = capsys.readouterr().out
+    second = main(argv, container)
+    again = capsys.readouterr().out
+
+    assert (first, second) == (0, 0)
+    assert "golden dataset: 52 questions (0 skipped)" in out
+    assert "ingested faq.txt" in out
+    assert "kept faq.txt" in again and "golden dataset" not in again
+    assert len(list(tmp_path.glob("*.md"))) == 2
+    [collection] = container.ingestion.list_collections()
+    assert len(container.golden.questions(collection.id)) == 52
