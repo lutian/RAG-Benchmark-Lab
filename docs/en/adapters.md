@@ -69,6 +69,7 @@ Every `openai.OpenAIError`, and an HTTP 200 carrying an error object instead of 
 
 - `sentence-transformers` and torch are an **optional extra** (`uv sync --extra local-rerank`). On Linux, torch comes from the PyTorch CPU index (`[tool.uv.sources]`), which avoids gigabytes of CUDA libraries. Without the extra, a reranked search returns 502 with "Install the 'local-rerank' extra or set RERANKER_PROVIDER=api".
 - The first reranked search pays the model load (seconds). Latency benchmarks warm the reranker up before measuring.
+- Setup, model choice and compatible API providers: [Reranker setup](configuration.md#reranker-setup). Hugging Face TEI is not compatible (its `/rerank` takes `texts`, not `documents`).
 - Every failure (load, runtime, HTTP status, malformed body, unreachable host) becomes `RerankerError` → HTTP 502.
 
 **Why not rerank through LangChain?** LangChain's rerankers wrap specific vendors; a 40-line `httpx` adapter covers every `/rerank` server that speaks the de facto Jina/Cohere schema, and the local adapter is a thin wrapper over the library that actually runs the model.

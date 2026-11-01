@@ -143,6 +143,19 @@ Extra opcional `local-rerank` (`uv sync --extra local-rerank`, instalado na imag
 
 Tudo (modelos, endpoints, API keys, limites) fica no `.env`. Qualquer provedor **compatível com OpenAI** funciona para o LLM e para os embeddings, configurados de forma independente: OpenAI, OpenRouter, Ollama, llama.cpp, vLLM… Veja [docs/pt-BR/configuration.md](docs/pt-BR/configuration.md).
 
+### Reranker
+
+O reranker funciona sem configuração extra com estes valores padrão (a imagem Docker já o inclui; o modelo, ~90 MB, é baixado na primeira busca com reranking):
+
+```dotenv
+RERANKER_PROVIDER=local
+RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+RERANKER_BASE_URL=
+RERANKER_API_KEY=
+```
+
+`RERANKER_BASE_URL` e `RERANKER_API_KEY` só são usados com `RERANKER_PROVIDER=api` (Jina, Cohere, vLLM, llama.cpp). Para um corpus que não está em inglês, use um modelo multilíngue como `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`. Modelos, provedores via API, download antecipado e solução de problemas: [Configuração do reranker](docs/pt-BR/configuration.md#configuração-do-reranker).
+
 ## Arquitetura em uma imagem
 
 ```text
