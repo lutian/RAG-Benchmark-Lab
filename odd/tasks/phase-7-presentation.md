@@ -21,7 +21,7 @@ Assumptions (not user-stated): the sample corpus is original fictional content w
 | T1 | S1 S3 S4 S5 | inline | done | 371a947, 434ba8c |
 | T2 | S2 S4 | inline | done | a15bae4 |
 | T3 | S2 | inline | done | a15bae4, c5e066c, 434ba8c |
-| T4 | S3 S6 | inline | done | (docs commit) |
+| T4 | S3 S6 | inline | done | c672be4 |
 
 - T1 Streamlit "Benchmark" dashboard: run a benchmark, KPI tiles vs targets, Recall@5 matrix, latency chart, head-to-head, per-question drill-down, report download.
 - T2 Sample corpus (`examples/corpus/`) and 50-question golden dataset (`examples/golden.json`).
@@ -37,3 +37,4 @@ Route evidence: sequential, parent writes inline. Risk: item 5 for the Dockerfil
 - L3 Verification: 256 unit tests + contracts/integration green with TEST_DATABASE_URL; ruff + mypy --strict clean. Real E2E: `rag-lab demo` on PostgreSQL + pgvector (pgserver) with real embeddings (sentence-transformers all-MiniLM-L6-v2 behind a local OpenAI-compatible endpoint) and the real local cross-encoder: 7 documents, 84 chunks over 3 chunk sets, 52 golden questions, 624 measured queries in 5 min 19 s; every strategy met Recall@5 ≥ 85% and MRR@10 ≥ 0.75; best fixed-800-120 + hybrid_rerank (Recall@1 96.2%, MRR 0.978, p50 1.85 s on one vCPU). Saved as examples/sample-report.md. Not verified: Docker Compose build/run, a hosted LLM provider (generation metrics only with stubs), the Streamlit dashboard in a real browser.
 - L4 Guide claim corrected with evidence: the first draft said full-text wins on product codes; the per-question ranks show it wins on distinctive shared terms (Final Sale, gift card, points, expire) and vectors win on paraphrases (plane/air, crushed/damaged, membership level/tier).
 - L5 Native review: a0ad641..a15bae4 (review-7752c69bb59b214b, 3 lenses) approved; c5e066c Dockerfile alone (review-8b3eaafa95a000fa, item 5) approved; advisories fixed in 434ba8c.
+- L6 Final review c5e066c..c672be4 (review-80c12c42f61adb17): one CRITICAL finding (removed try/except made one rejected LLM reply abort a generation batch), bounded correction in its own commit with a regression test, targeted validation **approved**, acknowledged. A whole-branch review requested by the stop hook stopped at lens_context_budget_exceeded (~8,900 lines); every slice was reviewed separately. Final suite: 302 passed with PostgreSQL.
