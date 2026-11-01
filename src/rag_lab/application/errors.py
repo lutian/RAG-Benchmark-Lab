@@ -35,3 +35,7 @@ class InvalidRequestError(RagLabError):
 
 class RerankerError(RagLabError):
     """The reranker failed (model not installed, API unreachable, malformed response)."""
+
+
+class GenerationProviderError(RagLabError):
+    """The chat LLM failed, was unreachable, or returned an unusable response."""

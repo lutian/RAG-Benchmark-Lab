@@ -1,9 +1,14 @@
 """Test doubles shared across suites."""
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
-from rag_lab.application.errors import EmbeddingProviderError, RerankerError
+from rag_lab.application.errors import (
+    EmbeddingProviderError,
+    GenerationProviderError,
+    RerankerError,
+)
+from rag_lab.application.ports.generation import ChatMessage, Completion
 from rag_lab.domain.embeddings import EmbeddingSpec
 
 
@@ -91,3 +96,24 @@ class FakeReranker:
         if self._fail:
             raise RerankerError("fake reranker outage")
         return [1.0 if self._prefer and self._prefer in t.lower() else 0.0 for t in texts]
+
+
+class FakeChatModel:
+    """Returns a scripted reply (or one computed from the prompt) and records prompts."""
+
+    def __init__(self, reply: str | Callable[[str], str] = "", fail: bool = False) -> None:
+        self._reply = reply
+        self._fail = fail
+        self.prompts: list[list[ChatMessage]] = []
+
+    @property
+    def name(self) -> str:
+        return "fake-chat"
+
+    def complete(self, messages: Sequence[ChatMessage]) -> Completion:
+        self.prompts.append(list(messages))
+        if self._fail:
+            raise GenerationProviderError("fake LLM outage")
+        user = messages[-1].content
+        text = self._reply(user) if callable(self._reply) else self._reply
+        return Completion(text=text, model="fake-chat-1", prompt_tokens=10, completion_tokens=5)
