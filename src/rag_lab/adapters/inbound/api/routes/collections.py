@@ -3,13 +3,14 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, UploadFile, status
+from fastapi import APIRouter, Depends, Request, Response, UploadFile, status
 
 from rag_lab.adapters.inbound.api.schemas import (
     ChunkingConfigIn,
     ChunkOut,
     CollectionIn,
     CollectionOut,
+    CollectionRenameIn,
     DocumentDetailOut,
     DocumentSummaryOut,
     IngestionOut,
@@ -53,6 +54,22 @@ def list_collections(container: ContainerDep) -> list[CollectionOut]:
 @router.get("/{collection_id}")
 def get_collection(collection_id: UUID, container: ContainerDep) -> CollectionOut:
     return CollectionOut.from_domain(_service(container).get_collection(collection_id))
+
+
+@router.patch("/{collection_id}")
+def rename_collection(
+    collection_id: UUID, body: CollectionRenameIn, container: ContainerDep
+) -> CollectionOut:
+    return CollectionOut.from_domain(
+        _service(container).rename_collection(collection_id, body.name)
+    )
+
+
+@router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_collection(collection_id: UUID, container: ContainerDep) -> Response:
+    """Delete the collection and everything in it. Irreversible."""
+    _service(container).delete_collection(collection_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{collection_id}/chunking-configs", status_code=status.HTTP_201_CREATED)

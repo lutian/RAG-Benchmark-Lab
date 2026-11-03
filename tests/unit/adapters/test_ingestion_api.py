@@ -143,3 +143,71 @@ def test_document_from_another_collection_returns_404(client: TestClient) -> Non
     document_id = upload(client, beta, "guide.md", MARKDOWN)["id"]
 
     assert client.get(f"/collections/{alpha}/documents/{document_id}").status_code == 404
+
+
+def test_collection_can_be_renamed(client: TestClient) -> None:
+    collection_id = create_collection(client)
+
+    response = client.patch(f"/collections/{collection_id}", json={"name": "  manuals  "})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["name"] == "manuals"
+    assert client.get(f"/collections/{collection_id}").json()["name"] == "manuals"
+
+
+def test_rename_to_an_existing_name_returns_409(client: TestClient) -> None:
+    create_collection(client, "docs")
+    other_id = create_collection(client, "other")
+
+    response = client.patch(f"/collections/{other_id}", json={"name": "docs"})
+
+    assert response.status_code == 409
+    assert client.get(f"/collections/{other_id}").json()["name"] == "other"
+
+
+def test_rename_to_the_same_name_is_a_no_op(client: TestClient) -> None:
+    collection_id = create_collection(client)
+
+    response = client.patch(f"/collections/{collection_id}", json={"name": "docs"})
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "docs"
+
+
+def test_rename_to_a_blank_name_is_rejected(client: TestClient) -> None:
+    collection_id = create_collection(client)
+
+    response = client.patch(f"/collections/{collection_id}", json={"name": "   "})
+
+    assert response.status_code in (400, 422)
+    assert client.get(f"/collections/{collection_id}").json()["name"] == "docs"
+
+
+def test_renaming_an_unknown_collection_returns_404(client: TestClient) -> None:
+    response = client.patch("/collections/00000000-0000-0000-0000-000000000000", json={"name": "x"})
+
+    assert response.status_code == 404
+
+
+def test_deleting_a_collection_removes_it_and_its_documents(client: TestClient) -> None:
+    collection_id = create_collection(client)
+    keep_id = create_collection(client, "keep")
+    upload(client, collection_id, "guide.md", MARKDOWN)
+    upload(client, keep_id, "guide.md", MARKDOWN)
+
+    response = client.delete(f"/collections/{collection_id}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get(f"/collections/{collection_id}").status_code == 404
+    assert client.get(f"/collections/{collection_id}/documents").status_code == 404
+    assert [c["id"] for c in client.get("/collections").json()] == [keep_id]
+    assert len(client.get(f"/collections/{keep_id}/documents").json()) == 1
+    # The name is free again.
+    assert client.post("/collections", json={"name": "docs"}).status_code == 201
+
+
+def test_deleting_an_unknown_collection_returns_404(client: TestClient) -> None:
+    response = client.delete("/collections/00000000-0000-0000-0000-000000000000")
+
+    assert response.status_code == 404

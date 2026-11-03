@@ -27,6 +27,68 @@ def _fail(error: Exception) -> None:
     st.stop()
 
 
+# Widget state cannot change after the widget is drawn, so a rename stores the new name
+# here and the selectbox picks it up on the next run.
+PENDING_SELECTION = "ingestion-pending-collection"
+SELECTED_COLLECTION = "ingestion-collection"
+# Which confirmation dialog is open ("rename" or "delete"). Kept in session state so the
+# dialog survives full reruns; closing it with X or Escape clears it.
+OPEN_DIALOG = "ingestion-collection-dialog"
+
+
+def _close_dialog() -> None:
+    st.session_state.pop(OPEN_DIALOG, None)
+
+
+def _open_dialog(name: str) -> None:
+    st.session_state[OPEN_DIALOG] = name
+
+
+@st.dialog("Rename collection", on_dismiss=_close_dialog)
+def _rename_dialog(collection: dict[str, Any]) -> None:
+    new_name = st.text_input("New name", value=collection["name"])
+    st.caption(
+        f"Rename **{collection['name']}** to **{new_name.strip() or '…'}**? "
+        "Documents, indexes, golden questions and runs are kept."
+    )
+    confirm, cancel = st.columns(2)
+    confirmed = confirm.button("Rename", type="primary", width="stretch")
+    if cancel.button("Cancel", width="stretch"):
+        _close_dialog()
+        st.rerun()
+    if confirmed:
+        try:
+            renamed = client.rename_collection(collection["id"], new_name)
+        except (api_client.ApiError, httpx.HTTPError) as error:
+            st.error(str(error))
+            return
+        st.session_state[PENDING_SELECTION] = renamed["name"]
+        _close_dialog()
+        st.rerun()
+
+
+@st.dialog("Delete collection", on_dismiss=_close_dialog)
+def _delete_dialog(collection: dict[str, Any]) -> None:
+    st.warning(
+        f"Delete **{collection['name']}**? This permanently removes its documents, "
+        "chunk sets, vectors, golden questions and benchmark runs. It cannot be undone."
+    )
+    confirm, cancel = st.columns(2)
+    confirmed = confirm.button("Delete", type="primary", width="stretch")
+    if cancel.button("Cancel", width="stretch"):
+        _close_dialog()
+        st.rerun()
+    if confirmed:
+        try:
+            client.delete_collection(collection["id"])
+        except (api_client.ApiError, httpx.HTTPError) as error:
+            st.error(str(error))
+            return
+        st.session_state.pop(SELECTED_COLLECTION, None)
+        _close_dialog()
+        st.rerun()
+
+
 try:
     collections = client.list_collections()
 except (api_client.ApiError, httpx.HTTPError) as error:
@@ -36,9 +98,24 @@ except (api_client.ApiError, httpx.HTTPError) as error:
 with st.sidebar:
     st.markdown("**Collection**")
     names = [c["name"] for c in collections]
+    pending = st.session_state.pop(PENDING_SELECTION, None)
+    if pending in names:
+        st.session_state[SELECTED_COLLECTION] = pending
     selected_name = (
-        st.selectbox("Collection", names, label_visibility="collapsed") if names else None
+        st.selectbox("Collection", names, key=SELECTED_COLLECTION, label_visibility="collapsed")
+        if names
+        else None
     )
+    if selected_name is not None:
+        current = next(c for c in collections if c["name"] == selected_name)
+        rename_column, delete_column = st.columns(2)
+        rename_column.button("Rename", width="stretch", on_click=_open_dialog, args=("rename",))
+        delete_column.button("Delete", width="stretch", on_click=_open_dialog, args=("delete",))
+        dialog = st.session_state.get(OPEN_DIALOG)
+        if dialog == "rename":
+            _rename_dialog(current)
+        elif dialog == "delete":
+            _delete_dialog(current)
 
     with st.expander("New collection"), st.form("new-collection", clear_on_submit=True):
         name = st.text_input("Name")

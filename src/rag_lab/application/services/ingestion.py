@@ -70,6 +70,29 @@ class IngestionService:
         with self._uow_factory() as uow:
             return self._require_collection(uow, collection_id)
 
+    def rename_collection(self, collection_id: UUID, name: str) -> Collection:
+        with self._uow_factory() as uow:
+            collection = self._require_collection(uow, collection_id)
+            try:
+                renamed = collection.renamed(name)
+            except ValueError as error:
+                raise InvalidRequestError(str(error)) from error
+            if renamed.name == collection.name:
+                return collection
+            if uow.collections.get_by_name(renamed.name):
+                raise ConflictError(f"collection {renamed.name!r} already exists")
+            uow.collections.update(renamed)
+            uow.commit()
+        return renamed
+
+    def delete_collection(self, collection_id: UUID) -> None:
+        """Delete the collection with its documents, chunk sets, vectors, golden
+        questions and benchmark runs. Irreversible."""
+        with self._uow_factory() as uow:
+            if not uow.collections.delete(collection_id):
+                raise NotFoundError(f"collection {collection_id} not found")
+            uow.commit()
+
     def add_chunking_config(self, collection_id: UUID, config: ChunkingConfig) -> Collection:
         """Register a new chunk set and chunk every existing document with it."""
         with self._uow_factory() as uow:

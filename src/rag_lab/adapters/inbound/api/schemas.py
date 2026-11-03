@@ -81,6 +81,10 @@ class CollectionIn(BaseModel):
     )
 
 
+class CollectionRenameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
 class CollectionOut(BaseModel):
     id: UUID
     name: str

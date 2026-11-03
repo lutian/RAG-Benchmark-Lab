@@ -37,7 +37,7 @@ To check the Docker setup itself without any provider key, run `make compose-smo
 | API (FastAPI) | http://localhost:8000 · interactive docs at http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (loopback only) |
 
-Then open the UI, create a collection in the sidebar, upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set. Press **Index chunk set** to embed it with the provider configured in `.env`. On the **Retrieval** page, ask a question and compare vector, full-text, hybrid and reranked results side by side. The first reranked search downloads the cross-encoder (~90 MB) into the `models` volume. On the **Ask** page, get an answer with citations next to the sources it was given. On **Golden dataset**, generate questions with the LLM, add your own, and approve the ones the benchmark should use; then run the benchmark from the **Benchmark** page (or `docker compose exec api rag-lab benchmark --collection <name>`) and compare strategies on the dashboard.
+Then open the UI, create a collection in the sidebar (rename or delete it there too, each behind a confirmation dialog), upload PDF, Markdown or TXT files, and inspect the chunk boundaries of each chunk set. Press **Index chunk set** to embed it with the provider configured in `.env`. On the **Retrieval** page, ask a question and compare vector, full-text, hybrid and reranked results side by side. The first reranked search downloads the cross-encoder (~90 MB) into the `models` volume. On the **Ask** page, get an answer with citations next to the sources it was given. On **Golden dataset**, generate questions with the LLM, add your own, and approve the ones the benchmark should use; then run the benchmark from the **Benchmark** page (or `docker compose exec api rag-lab benchmark --collection <name>`) and compare strategies on the dashboard.
 
 Optional local models with Ollama:
 
@@ -75,6 +75,10 @@ How to read these numbers (and run your own corpus): [benchmark guide](docs/en/b
 # 1. Create a collection (one chunk set per strategy by default)
 curl -s -X POST localhost:8000/collections -H 'content-type: application/json' \
      -d '{"name": "my-docs"}'
+# Rename it, or delete it with everything in it (irreversible)
+curl -s -X PATCH localhost:8000/collections/<collection_id> -H 'content-type: application/json' \
+     -d '{"name": "team-docs"}'
+curl -s -X DELETE localhost:8000/collections/<collection_id>
 
 # 2. Upload a document
 curl -s -X POST localhost:8000/collections/<collection_id>/documents -F "file=@report.pdf"

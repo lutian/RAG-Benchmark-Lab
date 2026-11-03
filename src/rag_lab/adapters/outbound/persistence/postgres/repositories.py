@@ -73,10 +73,12 @@ class PostgresCollectionRepository:
         self._save_configs(collection)
 
     def update(self, collection: Collection) -> None:
-        self._connection.execute(
+        # Through _write: a concurrent rename to the same name is a conflict, not a crash.
+        _write(
+            self._connection,
             update(t.collections)
             .where(t.collections.c.id == collection.id)
-            .values(name=collection.name)
+            .values(name=collection.name),
         )
         self._save_embedding(collection)
         self._save_configs(collection)
@@ -132,6 +134,13 @@ class PostgresCollectionRepository:
             select(t.collections).order_by(t.collections.c.created_at, t.collections.c.id)
         )
         return [self._to_domain(row) for row in rows]
+
+    def delete(self, collection_id: UUID) -> bool:
+        # Foreign keys cascade to configs, documents, chunks, vectors, questions and runs.
+        result = self._connection.execute(
+            delete(t.collections).where(t.collections.c.id == collection_id)
+        )
+        return result.rowcount > 0
 
     def _to_domain(self, row: Row[Any]) -> Collection:
         configs = self._connection.execute(
