@@ -24,8 +24,10 @@ class OpenAICompatibleChatModel:
     ``options`` holds only the generation parameters configured in ``.env``
     (``temperature`` and/or ``reasoning_effort``, see ``Settings.llm_generation_options``):
     a parameter that is not set is never sent, because reasoning models reject
-    ``temperature``. The Responses API is disabled: only Chat Completions is implemented
-    by every compatible provider.
+    ``temperature``. When the provider rejects ``reasoning_effort`` (a classic model) and
+    ``fallback_options`` is given, the request is retried once with those options, and
+    every later request uses them. The Responses API is disabled: only Chat Completions
+    is implemented by every compatible provider.
     """
 
     def __init__(
@@ -35,23 +37,45 @@ class OpenAICompatibleChatModel:
         model: str,
         timeout_seconds: float,
         options: Mapping[str, float | str] | None = None,
+        fallback_options: Mapping[str, float | str] | None = None,
     ) -> None:
         self._model_name = model
         self._base_url = base_url
-        self._client = ChatOpenAI(
-            model=model,
-            base_url=base_url,
-            api_key=SecretStr(api_key or _PLACEHOLDER_KEY),
-            timeout=timeout_seconds,
+        self._api_key = SecretStr(api_key or _PLACEHOLDER_KEY)
+        self._timeout_seconds = timeout_seconds
+        self._client = self._build_client(options or {})
+        self._fallback_options = fallback_options
+
+    def _build_client(self, options: Mapping[str, float | str]) -> ChatOpenAI:
+        return ChatOpenAI(
+            model=self._model_name,
+            base_url=self._base_url,
+            api_key=self._api_key,
+            timeout=self._timeout_seconds,
             # One retry: a generation that timed out may still be billed upstream.
             max_retries=1,
             use_responses_api=False,
-            **dict(options or {}),
+            **dict(options),
         )
 
     @property
     def name(self) -> str:
         return self._model_name
+
+    def _invoke(self, messages: list[BaseMessage]) -> BaseMessage:
+        try:
+            return self._client.invoke(messages)
+        except openai.BadRequestError as error:
+            if self._fallback_options is None or "reasoning_effort" not in str(error):
+                raise
+            _log.warning(
+                "chat model %r rejected reasoning_effort; retrying with %s from now on",
+                self._model_name,
+                dict(self._fallback_options) or "provider defaults",
+            )
+            self._client = self._build_client(self._fallback_options)
+            self._fallback_options = None
+            return self._client.invoke(messages)
 
     def complete(self, messages: Sequence[ChatMessage]) -> Completion:
         converted: list[BaseMessage] = [
@@ -59,7 +83,7 @@ class OpenAICompatibleChatModel:
             for m in messages
         ]
         try:
-            reply = self._client.invoke(converted)
+            reply = self._invoke(converted)
         except (openai.OpenAIError, ValueError, TypeError, KeyError) as error:
             # ValueError/TypeError/KeyError: HTTP 200 with an error object or no choices
             # (some routers, e.g. OpenRouter, report upstream failures this way). The full

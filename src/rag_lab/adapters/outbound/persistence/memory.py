@@ -63,6 +63,19 @@ class InMemoryCollectionRepository:
     def list(self) -> list[Collection]:
         return sorted(self._state.collections.values(), key=lambda c: c.created_at)
 
+    def delete(self, collection_id: UUID) -> bool:
+        state = self._state
+        if state.collections.pop(collection_id, None) is None:
+            return False
+        state.documents = {
+            k: v for k, v in state.documents.items() if v.collection_id != collection_id
+        }
+        state.chunks = {k: v for k, v in state.chunks.items() if k[0] != collection_id}
+        state.vectors = {k: v for k, v in state.vectors.items() if k[0] != collection_id}
+        state.golden = {k: v for k, v in state.golden.items() if v.collection_id != collection_id}
+        state.runs = {k: v for k, v in state.runs.items() if v.collection_id != collection_id}
+        return True
+
 
 class InMemoryDocumentRepository:
     def __init__(self, state: _State) -> None:

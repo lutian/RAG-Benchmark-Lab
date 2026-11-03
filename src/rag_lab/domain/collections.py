@@ -39,6 +39,13 @@ class Collection:
     fulltext_language: str = "english"
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    @staticmethod
+    def _clean_name(name: str) -> str:
+        cleaned = name.strip()
+        if not cleaned:
+            raise ValueError("collection name is required")
+        return cleaned
+
     @classmethod
     def create(
         cls,
@@ -46,9 +53,7 @@ class Collection:
         chunking_configs: tuple[ChunkingConfig, ...] = (),
         fulltext_language: str = "english",
     ) -> "Collection":
-        cleaned = name.strip()
-        if not cleaned:
-            raise ValueError("collection name is required")
+        cleaned = cls._clean_name(name)
         keys = [config.key for config in chunking_configs]
         if len(keys) != len(set(keys)):
             raise ValueError("chunking configs must be unique")
@@ -63,6 +68,9 @@ class Collection:
             chunking_configs=chunking_configs,
             fulltext_language=fulltext_language,
         )
+
+    def renamed(self, name: str) -> "Collection":
+        return replace(self, name=self._clean_name(name))
 
     def with_chunking_config(self, config: ChunkingConfig) -> "Collection":
         if config in self.chunking_configs:

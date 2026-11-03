@@ -6,6 +6,13 @@ Não é um chatbot que lê PDFs. Você envia qualquer corpus. O laboratório o d
 
 > 🇺🇸 [Read in English](README.md)
 
+## O que ele faz
+
+1. Você envia documentos para coleções; eles são divididos em chunks e indexados com embeddings e busca full-text do PostgreSQL.
+2. A recuperação usa busca vetorial, full-text ou as duas combinadas (Reciprocal Rank Fusion), com reranking opcional por cross-encoder.
+3. O **Ask** responde com citações usando qualquer LLM com API compatível com a OpenAI (OpenAI, OpenRouter, Ollama, llama.cpp).
+4. Os benchmarks rodam as perguntas do golden dataset, guardam as métricas e registram o ambiente exato (modelos e parâmetros), para comparar configurações de forma reproduzível.
+
 ## Status
 
 | Fase | Entregável | Status |
@@ -37,7 +44,7 @@ Para verificar a configuração Docker sem nenhuma chave de provedor, rode `make
 | API (FastAPI) | http://localhost:8000 · documentação interativa em http://localhost:8000/docs |
 | PostgreSQL + pgvector | `localhost:5432` (apenas loopback) |
 
-Abra a UI, crie uma coleção na barra lateral, envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set. Clique em **Index chunk set** para gerar os embeddings com o provedor configurado no `.env`. Na página **Retrieval**, faça uma pergunta e compare lado a lado os resultados vetoriais, full-text, híbridos e com reranking. A primeira busca com reranking baixa o cross-encoder (~90 MB) para o volume `models`. Na página **Ask**, obtenha uma resposta com citações ao lado das fontes que o modelo recebeu. Em **Golden dataset**, gere perguntas com o LLM, adicione as suas e aprove as que o benchmark deve usar; depois rode o benchmark na página **Benchmark** (ou `docker compose exec api rag-lab benchmark --collection <nome>`) e compare as estratégias no dashboard.
+Abra a UI, crie uma coleção na barra lateral (é lá também que você a renomeia ou exclui, sempre com um modal de confirmação), envie arquivos PDF, Markdown ou TXT e inspecione os limites dos chunks de cada chunk set. Clique em **Index chunk set** para gerar os embeddings com o provedor configurado no `.env`. Na página **Retrieval**, faça uma pergunta e compare lado a lado os resultados vetoriais, full-text, híbridos e com reranking. A primeira busca com reranking baixa o cross-encoder (~90 MB) para o volume `models`. Na página **Ask**, obtenha uma resposta com citações ao lado das fontes que o modelo recebeu. Em **Golden dataset**, gere perguntas com o LLM, adicione as suas e aprove as que o benchmark deve usar; depois rode o benchmark na página **Benchmark** (ou `docker compose exec api rag-lab benchmark --collection <nome>`) e compare as estratégias no dashboard.
 
 Modelos locais opcionais com Ollama:
 
@@ -75,6 +82,10 @@ Como ler esses números (e rodar o seu próprio corpus): [guia do benchmark](doc
 # 1. Criar uma coleção (por padrão, um chunk set por estratégia)
 curl -s -X POST localhost:8000/collections -H 'content-type: application/json' \
      -d '{"name": "meus-docs"}'
+# Renomear, ou excluir com tudo o que ela contém (irreversível)
+curl -s -X PATCH localhost:8000/collections/<collection_id> -H 'content-type: application/json' \
+     -d '{"name": "docs-do-time"}'
+curl -s -X DELETE localhost:8000/collections/<collection_id>
 
 # 2. Enviar um documento
 curl -s -X POST localhost:8000/collections/<collection_id>/documents -F "file=@relatorio.pdf"

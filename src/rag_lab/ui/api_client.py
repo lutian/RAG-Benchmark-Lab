@@ -59,6 +59,15 @@ class ApiClient:
         result: dict[str, Any] = self._request("POST", "/collections", json=body)
         return result
 
+    def rename_collection(self, collection_id: str, name: str) -> dict[str, Any]:
+        result: dict[str, Any] = self._request(
+            "PATCH", f"/collections/{collection_id}", json={"name": name}
+        )
+        return result
+
+    def delete_collection(self, collection_id: str) -> None:
+        self._send("DELETE", f"/collections/{collection_id}")
+
     def add_chunking_config(self, collection_id: str, config: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = self._request(
             "POST", f"/collections/{collection_id}/chunking-configs", json=config
