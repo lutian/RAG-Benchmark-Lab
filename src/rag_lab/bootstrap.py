@@ -69,6 +69,7 @@ def build_chat_model(settings: Settings) -> ChatModel:
         model=settings.llm_model,
         timeout_seconds=settings.llm_timeout_seconds,
         options=settings.llm_generation_options(),
+        fallback_options=settings.llm_fallback_options(),
     )
 
 
@@ -87,6 +88,10 @@ def build_reranker(settings: Settings) -> Reranker:
 def environment(settings: Settings, reranker: Reranker, chat: ChatModel) -> dict[str, str]:
     """Models and retrieval settings recorded with every benchmark run."""
     generation = ", ".join(f"{k}={v}" for k, v in settings.llm_generation_options().items())
+    fallback = settings.llm_fallback_options()
+    if fallback is not None:
+        retry = ", ".join(f"{k}={v}" for k, v in fallback.items()) or "provider defaults"
+        generation += f"; if reasoning_effort is rejected: {retry}"
     return {
         "embedding": f"{settings.embedding_model} ({settings.embedding_dimensions}d)",
         "reranker": f"{settings.reranker_provider}: {reranker.name}",

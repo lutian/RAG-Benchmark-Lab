@@ -88,7 +88,8 @@ def test_rejects_unknown_reranker_provider(monkeypatch: pytest.MonkeyPatch) -> N
 
 # --- LLM sampling vs reasoning effort ---------------------------------------------------
 # OpenAI GPT-6 models reject temperature/top_p unless reasoning effort is "none"
-# (https://developers.openai.com/api/docs/guides/latest-model).
+# (https://developers.openai.com/api/docs/guides/latest-model). The reasoning effort is
+# sent first; the temperature is the fallback for models that reject reasoning_effort.
 
 
 def test_temperature_and_reasoning_effort_are_unset_by_default(
@@ -138,14 +139,47 @@ def test_temperature_without_reasoning_effort_is_sent_for_classic_models(
 
 
 @pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high", "xhigh", "max"])
-def test_temperature_with_active_reasoning_effort_is_rejected(
+def test_reasoning_effort_is_sent_first_and_temperature_kept_as_fallback(
     monkeypatch: pytest.MonkeyPatch, effort: str
 ) -> None:
     monkeypatch.setenv("LLM_REASONING_EFFORT", effort)
     monkeypatch.setenv("LLM_TEMPERATURE", "0")
 
-    with pytest.raises(ValueError, match="LLM_TEMPERATURE"):
-        Settings(_env_file=None)  # type: ignore[call-arg]
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_generation_options() == {"reasoning_effort": effort}
+    assert settings.llm_fallback_options() == {"temperature": 0.0}
+
+
+def test_fallback_without_temperature_drops_the_reasoning_effort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "low")
+    monkeypatch.delenv("LLM_TEMPERATURE", raising=False)
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_fallback_options() == {}
+
+
+def test_no_fallback_when_no_reasoning_effort_is_sent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LLM_REASONING_EFFORT", raising=False)
+    monkeypatch.setenv("LLM_TEMPERATURE", "0")
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_fallback_options() is None
+
+
+def test_fallback_after_effort_none_sends_only_the_temperature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "none")
+    monkeypatch.setenv("LLM_TEMPERATURE", "0.2")
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.llm_fallback_options() == {"temperature": 0.2}
 
 
 def test_rejects_unknown_reasoning_effort(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -180,3 +214,22 @@ def test_rerank_candidates_default_and_reranker_wiring() -> None:
     assert local.rerank_candidates == 30
     assert isinstance(build_reranker(local), CrossEncoderReranker)
     assert isinstance(build_reranker(api), HttpReranker)
+
+
+def test_benchmark_environment_records_the_temperature_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from rag_lab.bootstrap import environment
+
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "low")
+    monkeypatch.setenv("LLM_TEMPERATURE", "0")
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    named = SimpleNamespace(name="m")
+
+    recorded = environment(settings, named, named)  # type: ignore[arg-type]
+
+    assert recorded["llm"] == (
+        "m (reasoning_effort=low; if reasoning_effort is rejected: temperature=0.0)"
+    )

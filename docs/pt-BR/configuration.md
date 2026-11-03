@@ -33,7 +33,7 @@ docker compose up --build
 | `LLM_API_KEY` | vazio | Geração | Para o Ollama, qualquer valor não vazio |
 | `LLM_MODEL` | `gpt-4o-mini` | Geração | Id do modelo no provedor |
 | `LLM_REASONING_EFFORT` | não definido | Geração | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`; os valores aceitos variam por modelo. Enviado como `reasoning_effort` só quando definido |
-| `LLM_TEMPERATURE` | não definido | Geração | Enviado só quando definido. A inicialização falha se for combinado com um reasoning effort diferente de `none` (veja abaixo) |
+| `LLM_TEMPERATURE` | não definido | Geração | Enviado só quando definido. Com um reasoning effort ativo, é o fallback para modelos que rejeitam `reasoning_effort` (veja abaixo) |
 | `LLM_TIMEOUT_SECONDS` | `60` | Geração | Timeout das requisições |
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | OpenAI | Indexação (fase 2) | Qualquer endpoint `/embeddings` compatível com OpenAI |
 | `EMBEDDING_DIMENSIONS` | `1536` | Indexação | Deve corresponder ao modelo (ex.: `768` para `nomic-embed-text`). Não é enviado ao provedor: serve para validar os vetores retornados e vincular a coleção |
@@ -67,9 +67,11 @@ Os modelos de raciocínio da OpenAI rejeitam parâmetros de amostragem: *"When r
 |----------------|-----------|-------------------|
 | Modelo de raciocínio (ex.: `gpt-6.1-sol`) | `LLM_REASONING_EFFORT=low` (ou maior) | `LLM_TEMPERATURE` |
 | GPT-6 Sol / Luna com raciocínio desligado | `LLM_REASONING_EFFORT=none` e, opcionalmente, `LLM_TEMPERATURE` | — |
-| Modelo de chat clássico (ex.: `gpt-4o-mini`, a maioria dos modelos Ollama/llama.cpp) | `LLM_TEMPERATURE=0.0` para execuções reproduzíveis | `LLM_REASONING_EFFORT` |
+| Modelo de chat clássico (ex.: `gpt-4o-mini`, a maioria dos modelos Ollama/llama.cpp) | `LLM_TEMPERATURE=0.0` para execuções reproduzíveis | `LLM_REASONING_EFFORT` (ou mantenha: veja o fallback abaixo) |
 
-**Por que não há uma lista fixa de modelos?** A regra depende do reasoning effort, não só do nome do modelo, e novos modelos saem com frequência. A aplicação envia apenas o que você configurou. Ela recusa na inicialização a única combinação que a API documenta como inválida (temperatura com raciocínio ativo), em vez de falhar na primeira requisição.
+**Configurando os dois (effort primeiro, temperatura como fallback).** Com `LLM_REASONING_EFFORT` e `LLM_TEMPERATURE` definidos, a primeira requisição envia só `reasoning_effort` (mais `temperature` quando o effort é `none`). Se o provedor responder HTTP 400 citando `reasoning_effort`, o modelo é tratado como clássico: a requisição é reenviada uma vez só com `temperature`, e todas as requisições seguintes do processo usam essa configuração. A troca é registrada no log como aviso, e cada execução de benchmark registra a regra no seu ambiente (por exemplo `gpt-6-sol (reasoning_effort=low; if reasoning_effort is rejected: temperature=0.0)`). Provedores que ignoram parâmetros desconhecidos em silêncio (alguns servidores locais) nunca acionam o fallback e, portanto, rodam sem `temperature`.
+
+**Por que não há uma lista fixa de modelos?** A regra depende do reasoning effort, não só do nome do modelo, e novos modelos saem com frequência. A aplicação envia apenas o que você configurou e deixa a própria rejeição do provedor escolher o fallback.
 
 LLM e embeddings são configurados de forma **independente**: por exemplo, gerar com o OpenRouter e gerar embeddings localmente com o Ollama.
 

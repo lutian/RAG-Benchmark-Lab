@@ -24,6 +24,7 @@ class StubChat:
         usage: bool = True,
         error_body: bool = False,
         no_choices: bool = False,
+        reject_param: str | None = None,
     ) -> None:
         self.requests: list[dict[str, Any]] = []
         self.paths: list[str] = []
@@ -36,10 +37,19 @@ class StubChat:
                 stub.requests.append(body)
                 stub.paths.append(self.path)
                 stub.headers.append({k.lower(): v for k, v in self.headers.items()})
-                if error_body:
+                rejected = reject_param is not None and reject_param in body
+                if rejected:
                     payload: dict[str, Any] = {
-                        "error": {"message": "upstream route failed", "code": 502}
+                        "error": {
+                            "message": f"Unsupported parameter: '{reject_param}' is not "
+                            "supported with this model.",
+                            "type": "invalid_request_error",
+                            "param": reject_param,
+                            "code": "unsupported_parameter",
+                        }
                     }
+                elif error_body:
+                    payload = {"error": {"message": "upstream route failed", "code": 502}}
                 elif no_choices:
                     payload = {
                         "id": "c",
@@ -70,7 +80,7 @@ class StubChat:
                             "total_tokens": 16,
                         }
                 raw = json.dumps(payload).encode()
-                self.send_response(status)
+                self.send_response(400 if rejected else status)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(raw)))
                 self.end_headers()
@@ -123,6 +133,76 @@ def test_sends_only_the_generation_options_that_are_set(stub: StubChat) -> None:
     assert with_temperature["temperature"] == 0.0
     assert reasoning["reasoning_effort"] == "low"
     assert "temperature" not in reasoning
+
+
+def rejecting(param: str) -> Iterator[StubChat]:
+    server = StubChat(reject_param=param)
+    yield server
+    server.server.shutdown()
+
+
+@pytest.fixture
+def rejects_effort() -> Iterator[StubChat]:
+    yield from rejecting("reasoning_effort")
+
+
+@pytest.fixture
+def rejects_temperature() -> Iterator[StubChat]:
+    yield from rejecting("temperature")
+
+
+def fallback_model(url: str, fallback: dict[str, float] | None) -> OpenAICompatibleChatModel:
+    return OpenAICompatibleChatModel(
+        base_url=url,
+        api_key="secret",
+        model="my-model",
+        timeout_seconds=5,
+        options={"reasoning_effort": "low"},
+        fallback_options=fallback,
+    )
+
+
+def test_rejected_reasoning_effort_is_retried_with_the_temperature(
+    rejects_effort: StubChat,
+) -> None:
+    chat = fallback_model(rejects_effort.url, {"temperature": 0.0})
+
+    first = chat.complete(MESSAGES)
+    chat.complete(MESSAGES)
+
+    assert first.text == "The answer [1]."
+    rejected, retried, later = rejects_effort.requests
+    assert rejected["reasoning_effort"] == "low" and "temperature" not in rejected
+    assert retried["temperature"] == 0.0 and "reasoning_effort" not in retried
+    # The switch sticks: later calls do not pay for another rejected request.
+    assert later["temperature"] == 0.0 and "reasoning_effort" not in later
+
+
+def test_rejected_reasoning_effort_without_fallback_is_a_provider_error(
+    rejects_effort: StubChat,
+) -> None:
+    with pytest.raises(GenerationProviderError):
+        fallback_model(rejects_effort.url, None).complete(MESSAGES)
+
+    assert len(rejects_effort.requests) == 1
+
+
+def test_other_rejected_parameters_do_not_trigger_the_fallback(
+    rejects_temperature: StubChat,
+) -> None:
+    chat = OpenAICompatibleChatModel(
+        base_url=rejects_temperature.url,
+        api_key="secret",
+        model="my-model",
+        timeout_seconds=5,
+        options={"temperature": 0.0},
+        fallback_options={"temperature": 0.0},
+    )
+
+    with pytest.raises(GenerationProviderError):
+        chat.complete(MESSAGES)
+
+    assert len(rejects_temperature.requests) == 1
 
 
 def test_missing_usage_is_reported_as_unknown() -> None:

@@ -6,9 +6,9 @@ code change. Real environment variables take precedence over the file.
 """
 
 from functools import lru_cache
-from typing import Literal, Self
+from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from rag_lab.domain.collections import FULLTEXT_LANGUAGES
@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # Both optional: a parameter that is not set is not sent to the provider.
     # Reasoning models (e.g. OpenAI GPT-6) reject temperature/top_p unless the
     # reasoning effort is "none"; GPT-6.1 Sol and GPT-6 Astra never accept it.
+    # When both are set, the effort is sent first and the temperature is the fallback
+    # for models that reject reasoning_effort (see llm_fallback_options).
     llm_temperature: float | None = None
     llm_reasoning_effort: (
         Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"] | None
@@ -77,24 +79,29 @@ class Settings(BaseSettings):
             )
         return value
 
-    @model_validator(mode="after")
-    def _temperature_requires_no_reasoning(self) -> Self:
-        if self.llm_temperature is not None and self.llm_reasoning_effort not in (None, "none"):
-            raise ValueError(
-                "LLM_TEMPERATURE cannot be combined with LLM_REASONING_EFFORT="
-                f"{self.llm_reasoning_effort!r}: reasoning models only accept temperature "
-                "when the effort is 'none'. Unset LLM_TEMPERATURE or set the effort to 'none'."
-            )
-        return self
-
     def llm_generation_options(self) -> dict[str, float | str]:
-        """Sampling/reasoning parameters to send with chat requests (only the ones set)."""
+        """Parameters for the first chat request (only the ones set).
+
+        The reasoning effort wins: the temperature goes along only when the effort is
+        unset or ``none``, the only cases where reasoning models accept it.
+        """
         options: dict[str, float | str] = {}
         if self.llm_reasoning_effort is not None:
             options["reasoning_effort"] = self.llm_reasoning_effort
-        if self.llm_temperature is not None:
+        if self.llm_temperature is not None and self.llm_reasoning_effort in (None, "none"):
             options["temperature"] = self.llm_temperature
         return options
+
+    def llm_fallback_options(self) -> dict[str, float | str] | None:
+        """Parameters to retry with when the provider rejects ``reasoning_effort``.
+
+        ``None`` when no reasoning effort is sent, so there is nothing to fall back from.
+        """
+        if self.llm_reasoning_effort is None:
+            return None
+        if self.llm_temperature is None:
+            return {}
+        return {"temperature": self.llm_temperature}
 
 
 @lru_cache

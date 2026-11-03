@@ -33,7 +33,7 @@ docker compose up --build
 | `LLM_API_KEY` | empty | Generation | Use any non-empty value for Ollama |
 | `LLM_MODEL` | `gpt-4o-mini` | Generation | Provider model id |
 | `LLM_REASONING_EFFORT` | unset | Generation | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`; supported values vary by model. Sent as `reasoning_effort` only when set |
-| `LLM_TEMPERATURE` | unset | Generation | Sent only when set. Startup fails if combined with a reasoning effort other than `none` (see below) |
+| `LLM_TEMPERATURE` | unset | Generation | Sent only when set. With an active reasoning effort it is the fallback for models that reject `reasoning_effort` (see below) |
 | `LLM_TIMEOUT_SECONDS` | `60` | Generation | Request timeout |
 | `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | OpenAI | Indexing (phase 2) | Any OpenAI-compatible `/embeddings` endpoint |
 | `EMBEDDING_DIMENSIONS` | `1536` | Indexing | Must match the model (e.g. `768` for `nomic-embed-text`). Not sent to the provider: used to validate returned vectors and bind the collection |
@@ -67,9 +67,11 @@ OpenAI's reasoning models reject sampling parameters: *"When reasoning effort is
 |------------|-----------|-------------|
 | Reasoning model (e.g. `gpt-6.1-sol`) | `LLM_REASONING_EFFORT=low` (or higher) | `LLM_TEMPERATURE` |
 | GPT-6 Sol / Luna with reasoning off | `LLM_REASONING_EFFORT=none`, optionally `LLM_TEMPERATURE` | — |
-| Classic chat model (e.g. `gpt-4o-mini`, most Ollama/llama.cpp models) | `LLM_TEMPERATURE=0.0` for reproducible runs | `LLM_REASONING_EFFORT` |
+| Classic chat model (e.g. `gpt-4o-mini`, most Ollama/llama.cpp models) | `LLM_TEMPERATURE=0.0` for reproducible runs | `LLM_REASONING_EFFORT` (or keep it: see the fallback below) |
 
-**Why no hard-coded model list?** The rule depends on the reasoning effort, not just the model name, and new models ship often. The app sends only what you configure. It rejects at startup the one combination the API documents as invalid (temperature with active reasoning), instead of failing on the first request.
+**Setting both (effort first, temperature as fallback).** With `LLM_REASONING_EFFORT` and `LLM_TEMPERATURE` both set, the first request sends only `reasoning_effort` (plus `temperature` when the effort is `none`). If the provider answers HTTP 400 naming `reasoning_effort`, the model is treated as a classic one: the request is retried once with only `temperature`, and every later request in that process uses it. The switch is logged as a warning, and each benchmark run records the rule in its environment (for example `gpt-6-sol (reasoning_effort=low; if reasoning_effort is rejected: temperature=0.0)`). Providers that silently ignore unknown parameters (some local servers) never trigger the fallback, so they run without `temperature`.
+
+**Why no hard-coded model list?** The rule depends on the reasoning effort, not just the model name, and new models ship often. The app sends only what you configure and lets the provider's own rejection pick the fallback.
 
 LLM and embeddings are configured **independently**: for example, generate with OpenRouter and embed locally with Ollama.
 
