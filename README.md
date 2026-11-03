@@ -6,6 +6,13 @@ This is not a chatbot that reads PDFs. You upload any corpus. The lab chunks it 
 
 > 🇧🇷 [Leia em português](README.pt-BR.md)
 
+## What it does
+
+1. Upload documents into collections; they are split into chunks and indexed with embeddings and PostgreSQL full-text search.
+2. Retrieve with vector search, full-text search or both combined (Reciprocal Rank Fusion), with optional cross-encoder reranking.
+3. **Ask** answers with citations using any LLM behind an OpenAI-compatible API (OpenAI, OpenRouter, Ollama, llama.cpp).
+4. Benchmarks run golden-dataset questions, store the metrics and record the exact environment (models and parameters), so configurations can be compared reproducibly.
+
 ## Status
 
 | Phase | Deliverable | Status |

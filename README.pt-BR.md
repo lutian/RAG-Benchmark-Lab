@@ -6,6 +6,13 @@ Não é um chatbot que lê PDFs. Você envia qualquer corpus. O laboratório o d
 
 > 🇺🇸 [Read in English](README.md)
 
+## O que ele faz
+
+1. Você envia documentos para coleções; eles são divididos em chunks e indexados com embeddings e busca full-text do PostgreSQL.
+2. A recuperação usa busca vetorial, full-text ou as duas combinadas (Reciprocal Rank Fusion), com reranking opcional por cross-encoder.
+3. O **Ask** responde com citações usando qualquer LLM com API compatível com a OpenAI (OpenAI, OpenRouter, Ollama, llama.cpp).
+4. Os benchmarks rodam as perguntas do golden dataset, guardam as métricas e registram o ambiente exato (modelos e parâmetros), para comparar configurações de forma reproduzível.
+
 ## Status
 
 | Fase | Entregável | Status |
