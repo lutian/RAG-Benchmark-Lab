@@ -29,7 +29,8 @@ services:
       sh -c "alembic upgrade head &&
              uvicorn rag_lab.adapters.inbound.api.app:create_app --factory --host 0.0.0.0 --port 8000"
     ports:
-      - "8000:8000"
+      # Host port is configurable (API_PORT) in case 8000 is taken on the host.
+      - "${API_PORT:-8000}:8000"
     volumes:
       # The cross-encoder is downloaded on the first reranked search; keep it.
       - models:/app/data/hf
